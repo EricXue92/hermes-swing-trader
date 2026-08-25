@@ -89,3 +89,51 @@ def log_event(event: str, **data) -> None:
     line = {"ts": datetime.now(timezone.utc).isoformat(), "event": event, **data}
     with SIGNALS_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(line, ensure_ascii=False) + "\n")
+
+
+# ---------------- 待确认信号 ----------------
+
+@dataclass
+class PendingSignal:
+    signal_id: str
+    symbol: str
+    qty: int
+    stop: float
+    confirm_token: str
+    summary_text: str
+    expires_at: float            # time.time() 时间戳
+    tg_message_id: int | None = None
+
+
+class PendingStore:
+    """内存中的待确认信号。进程重启即清空(可接受,等新信号)。"""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._items: dict[str, PendingSignal] = {}
+
+    def add(self, sig: PendingSignal) -> None:
+        with self._lock:
+            self._items[sig.signal_id] = sig
+
+    def get(self, signal_id: str) -> PendingSignal | None:
+        with self._lock:
+            return self._items.get(signal_id)
+
+    def remove(self, signal_id: str) -> None:
+        with self._lock:
+            self._items.pop(signal_id, None)
+
+    def has_symbol(self, symbol: str) -> bool:
+        with self._lock:
+            return any(s.symbol == symbol for s in self._items.values())
+
+    def pop_expired(self, now: float) -> list[PendingSignal]:
+        with self._lock:
+            expired = [s for s in self._items.values() if now > s.expires_at]
+            for s in expired:
+                self._items.pop(s.signal_id, None)
+            return expired
+
+
+PENDING = PendingStore()
