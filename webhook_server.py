@@ -298,3 +298,82 @@ async def hook(path_secret: str, sig: TVSignal, background_tasks: BackgroundTask
         raise HTTPException(status_code=403)
     background_tasks.add_task(handle_signal, sig)
     return {"ok": True}
+
+
+# ---------------- 确认回调与轮询 ----------------
+
+def handle_callback(cb: dict) -> None:
+    """处理 Telegram 按钮点击。只信任 TG_CHAT_ID 白名单用户。"""
+    cb_id = cb.get("id", "")
+    if str(cb.get("from", {}).get("id")) != os.environ.get("TG_CHAT_ID", ""):
+        _tg().answer_callback(cb_id, "无权操作")
+        return
+    parsed = parse_callback_data(cb.get("data", ""))
+    if not parsed:
+        _tg().answer_callback(cb_id)
+        return
+    action, signal_id = parsed
+    pending = PENDING.get(signal_id)
+    if pending is None:
+        _tg().answer_callback(cb_id, "信号不存在或已处理")
+        return
+
+    if action == "reject":
+        PENDING.remove(signal_id)
+        _tg().answer_callback(cb_id, "已放弃")
+        if pending.tg_message_id:
+            _tg().edit_text(pending.tg_message_id, pending.summary_text + "\n\n❌ 已放弃")
+        log_event("signal_discarded", symbol=pending.symbol, signal_id=signal_id)
+        return
+
+    if time.time() > pending.expires_at:
+        PENDING.remove(signal_id)
+        _tg().answer_callback(cb_id, "已过期")
+        if pending.tg_message_id:
+            _tg().edit_text(pending.tg_message_id,
+                            pending.summary_text + "\n\n⌛ 已过期,未下单")
+        log_event("signal_expired", symbol=pending.symbol, signal_id=signal_id)
+        return
+
+    # 确认下单;place_bracket_buy 内部会再跑一遍完整风控
+    result = json.loads(ts.place_bracket_buy(pending.symbol, pending.qty,
+                                             pending.stop, pending.confirm_token))
+    PENDING.remove(signal_id)
+    if result.get("ok"):
+        _tg().answer_callback(cb_id, "已下单")
+        if pending.tg_message_id:
+            _tg().edit_text(pending.tg_message_id,
+                            pending.summary_text + f"\n\n✅ {result['message']}")
+        log_event("order_placed", symbol=pending.symbol, signal_id=signal_id,
+                  order_id=result.get("order_id"))
+    else:
+        errors = result.get("errors", [])
+        _tg().answer_callback(cb_id, "下单失败")
+        if pending.tg_message_id:
+            _tg().edit_text(pending.tg_message_id,
+                            pending.summary_text + "\n\n❌ 下单失败:\n- " + "\n- ".join(errors))
+        log_event("order_failed", symbol=pending.symbol, signal_id=signal_id,
+                  errors=errors)
+
+
+def sweep_expired() -> None:
+    """懒清理:把超时 pending 的消息标为已过期。由轮询线程每轮顺带调用。"""
+    for sig in PENDING.pop_expired(time.time()):
+        if sig.tg_message_id:
+            _tg().edit_text(sig.tg_message_id, sig.summary_text + "\n\n⌛ 已过期,未下单")
+        log_event("signal_expired", symbol=sig.symbol, signal_id=sig.signal_id)
+
+
+def poll_loop() -> None:
+    """Telegram 长轮询线程主循环。"""
+    offset = 0
+    while True:
+        try:
+            for update in _tg().get_updates(offset):
+                offset = update["update_id"] + 1
+                if "callback_query" in update:
+                    handle_callback(update["callback_query"])
+            sweep_expired()
+        except Exception as e:
+            print(f"[poll] 异常: {e}", file=sys.stderr)
+            time.sleep(5)
