@@ -25,20 +25,27 @@
 
 ## 部署步骤
 
-### 第 1 步:准备 Alpaca 模拟盘账号(免费)
+### 第 1 步:准备行情与交易账号(均免费)
 
-1. 注册 https://alpaca.markets → 进入 Paper Trading 面板 → 生成 API Key
-2. 记下 Key ID 和 Secret(模拟盘 key 只能操作虚拟资金)
+1. 注册 https://alpaca.markets → 进入 Paper Trading 面板 → 生成 API Key,
+   记下 Key ID 和 Secret(模拟盘 key 只能操作虚拟资金)
+2. 注册 https://finnhub.io → 拿免费 API key(实时报价用,60 次/分钟够用)
 
 ### 第 2 步:安装交易服务器(使用 uv)
 
 ```bash
 uv sync                          # 安装依赖(mcp 1.x + requests + fastapi/uvicorn)
 cp .env.example .env             # 若无 .env 则复制模板
-# 编辑 .env,填入 Key ID 和 Secret(服务器启动时自动加载,已被 .gitignore 忽略)
+# 编辑 .env,填入 APCA_API_KEY_ID / APCA_API_SECRET_KEY / FINNHUB_API_KEY
+# (服务器启动时自动加载,已被 .gitignore 忽略)
 # 快速自检(能连通 Alpaca 即成功):
 uv run python -c "import trading_server as t; print(t.get_account())"
 ```
+
+**行情数据源**:最新价/当日开高低走 Finnhub 实时合并报价(全市场);
+成交量与历史日 K 走 Alpaca 全市场 feed(`delayed_sip`/`sip`,当日延迟 15 分钟,
+历史精确)。不填 `FINNHUB_API_KEY` 会退回 Alpaca 免费档默认的 IEX 源——
+只覆盖约 2% 成交量、价格可偏离真实市场价近 1%,突破判断会失真,不建议。
 
 ### 第 3 步:安装并配置 Hermes Agent
 

@@ -56,7 +56,7 @@ TRADE_API = "https://paper-api.alpaca.markets"   # 模拟盘。切真钱前请�
 DATA_API = "https://data.alpaca.markets"
 ALPACA_FEED = "delayed_sip"                      # 免费档可用的全市场数据源(延迟15分钟)
 FINNHUB_API = "https://finnhub.io/api/v1"
-FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY") or os.environ.get("FINHUB_API_Key", "")
+FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
 
 HEADERS = {
     "APCA-API-KEY-ID": os.environ.get("APCA_API_KEY_ID", ""),
