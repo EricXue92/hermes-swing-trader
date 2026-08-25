@@ -1,0 +1,8 @@
+[project]
+name = "hermes-swing-trader"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]>=1.2,<2",
+    "requests>=2.34.2",
+]
