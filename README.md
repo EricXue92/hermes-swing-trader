@@ -42,30 +42,60 @@ uv run python -c "import trading_server as t; print(t.get_account())"
 
 ### 第 3 步:安装并配置 Hermes Agent
 
-1. 按官方文档安装 Hermes 并连接你的模型提供商(Nous Portal / OpenRouter / 单家 API key)
-2. 配置 Telegram 网关:在 @BotFather 创建 bot 拿到 token,填入 Hermes 的 Telegram 配置,
-   **务必设置只响应你自己的 Telegram 用户 ID(白名单)**
-3. 把本 MCP 服务器注册进 Hermes(stdio 方式)。注册命令因版本而异,请以
-   官方 MCP 配置文档为准,典型配置形如:
-   ```json
-   {
-     "mcpServers": {
-       "swing-trading": {
-         "command": "uv",
-         "args": [
-           "run",
-           "--directory",
-           "/绝对路径/hermes-swing-trader",
-           "python",
-           "trading_server.py"
-         ]
-       }
-     }
-   }
+以下为实际部署并验证过的命令(Hermes 已按官方文档安装、`hermes` 在 PATH 中,
+模型提供商已连接,如 Nous Portal / OpenRouter / 单家 API key):
+
+1. **创建交易员 profile**(独立于日常使用的 default profile,会生成 `trader` 快捷命令):
+
+   ```bash
+   hermes profile create trader --description "Swing trading assistant with hard risk limits"
+   cp trader_profile.md ~/.hermes/profiles/trader/SOUL.md   # 个性化指令
    ```
-4. 创建交易员 profile,把 `trader_profile.md` 的内容设为该档案的个性化指令,
-   并按需 pin 一个模型(建议工具调用能力强的模型)
-5. **裁剪权限**:从该交易员档案中移除 shell、浏览器、文件写入等与交易无关的工具
+
+   注意:新建 profile 不会继承全局的模型配置,需确认
+   `~/.hermes/profiles/trader/config.yaml` 里有 `model:` 块(provider/default),
+   缺失会报 "Provider authentication failed";OAuth 凭据在共享凭据池中,无需重复登录。
+
+2. **注册本 MCP 服务器**(stdio 方式,8 个工具):
+
+   ```bash
+   trader mcp add swing-trading --command uv \
+     --args run --directory /绝对路径/hermes-swing-trader python trading_server.py
+   trader mcp test swing-trading   # 验证连通
+   ```
+
+3. **裁剪权限**:移除 shell、浏览器、文件写入等与交易无关的工具,
+   保留图像识别(看行情截图)、备忘、澄清提问、定时任务(收盘日报):
+
+   ```bash
+   for p in cli telegram; do
+     trader tools disable --platform $p web browser terminal file code_execution \
+       image_gen bfl tts computer_use delegation session_search skills
+   done
+   ```
+
+4. **配置 Telegram 网关**:在 @BotFather 创建**专用** bot(与 TradingView 通道的
+   bot 分开)拿到 token,私聊 @userinfobot 查自己的数字用户 ID,然后在
+   `~/.hermes/profiles/trader/.env` 中追加(行首不要留空格):
+
+   ```
+   TELEGRAM_BOT_TOKEN=<BotFather 给的 token>
+   TELEGRAM_ALLOWED_USERS=<你的数字用户 ID>
+   TELEGRAM_HOME_CHANNEL=<你的数字用户 ID>
+   ```
+
+   `TELEGRAM_ALLOWED_USERS` 是白名单,**必填**——能私聊 bot 的人就能指挥它;
+   `TELEGRAM_HOME_CHANNEL` 是主动通知(定时日报等)的投递地址,单人使用填同一个 ID。
+
+5. **安装并启动网关**(macOS 上注册为 launchd 服务,开机自启、崩溃自动重启):
+
+   ```bash
+   trader gateway install
+   trader gateway status
+   tail -f ~/.hermes/profiles/trader/logs/gateway.log   # 应看到 "telegram connected"
+   ```
+
+   按需 pin 一个工具调用能力强的模型(`trader model`)。
 
 ### 第 4 步:跑通一条完整链路
 
@@ -126,6 +156,10 @@ uv run python webhook_server.py
   瞬间封锁一切下单/改单;`off` 解除
 - **调风控**:改 `risk_config.json` 后重启服务生效;`trading_server.py`(经 Hermes)
   和 `webhook_server.py` 是两个进程,都在跑的话两个都要重启
+- **网关管理**:`trader gateway status` / `restart` / `stop`;
+  日志在 `~/.hermes/profiles/trader/logs/gateway.log`
+- **改交易规则**:改 `trader_profile.md` 后需重新
+  `cp trader_profile.md ~/.hermes/profiles/trader/SOUL.md` 并 `trader gateway restart`
 - **关闭二次确认**(不建议):`require_confirmation` 改为 `false`,
   agent 将可在风控范围内自主下单(TradingView 通道的按钮确认不受此开关影响)
 - **审计**:Alpaca 面板可查全部订单;TradingView 信号逐条记录在 `signals_log.jsonl`;
