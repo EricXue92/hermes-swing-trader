@@ -118,6 +118,19 @@ def test_sell_blocked_when_allow_short_false(env, monkeypatch):
     assert any("做空" in e for e in r["errors"])
 
 
+def test_existing_position_does_not_block_new_order(env, monkeypatch):
+    """规则更新 (2026-08-25):允许同一标的重复建仓/加仓。"""
+    def fake_get(url, params=None):
+        if url.endswith("/v2/account"):
+            return {"equity": "10000"}
+        if url.endswith("/v2/positions"):
+            return [{"symbol": "NVDA", "qty": "5"}]
+        return []
+    monkeypatch.setattr(ts, "_get", fake_get)
+    r = json.loads(ts.preview_bracket_buy("NVDA", 10, stop_loss=96.0))
+    assert r["approved"] is True
+
+
 def test_place_sell_blocked_by_kill_switch(env):
     (env / "KILL_SWITCH").touch()
     r = json.loads(ts.preview_bracket_sell("NVDA", 10, 104.0))
