@@ -82,7 +82,7 @@ Portal / OpenRouter / a single API key):
    (provider/default) — if missing you'll get "Provider authentication
    failed". OAuth credentials live in the shared pool; no need to log in again.
 
-2. **Register this MCP server** (stdio, 11 tools, long and short):
+2. **Register this MCP server** (stdio, 13 tools, long and short, incl. a fast direct-order path):
 
    ```bash
    trader mcp add swing-trading --command uv \

@@ -123,6 +123,16 @@ def _latest_price(symbol: str) -> float:
     return float(data["trade"]["p"])
 
 
+def _day_low_high(symbol: str) -> tuple[float, float]:
+    """当日最低/最高价(直接下单模式自动取止损用)。优先 Finnhub 实时值。"""
+    if FINNHUB_KEY:
+        q = _finnhub_quote(symbol)
+        return float(q["l"]), float(q["h"])
+    snap = _get(f"{DATA_API}/v2/stocks/{symbol}/snapshot", params={"feed": ALPACA_FEED})
+    d = snap.get("dailyBar", {})
+    return float(d["l"]), float(d["h"])
+
+
 def _risk_check(symbol: str, qty: float, stop_loss: float,
                 side: str = "buy") -> tuple[list[str], dict]:
     """执行全部硬风控检查。返回 (错误列表, 上下文数据)。错误列表为空 = 通过。
@@ -375,6 +385,80 @@ def place_bracket_sell(symbol: str, qty: float, stop_loss: float, confirm_token:
     return json.dumps({"ok": True, "order_id": order["id"], "status": order["status"],
                        "message": f"已提交 {symbol} 市价做空 {qty} 股,止损 {stop_loss}。"},
                       ensure_ascii=False)
+
+
+def _direct_bracket(symbol: str, side: str, pct_of_equity: float | None,
+                    qty: float | None, stop_loss: float | None) -> str:
+    symbol = symbol.upper()
+    if not CONFIG.get("allow_direct_order", False):
+        return json.dumps({"ok": False, "errors": [
+            "直接下单已被禁用 (allow_direct_order=false)。请走 preview → 确认流程。"]},
+            ensure_ascii=False)
+    if stop_loss is None:
+        low, high = _day_low_high(symbol)
+        stop_loss = low if side == "buy" else high
+    price = _latest_price(symbol)
+    if qty is None:
+        if not pct_of_equity:
+            return json.dumps({"ok": False, "errors": ["需提供 qty 或 pct_of_equity。"]},
+                              ensure_ascii=False)
+        equity = float(_get(f"{TRADE_API}/v2/account")["equity"])
+        qty = int(equity * pct_of_equity / 100 / price)
+        if qty < 1:
+            return json.dumps({"ok": False, "errors": [
+                f"按账户 {pct_of_equity}% 计算的金额不足 1 股(现价 {price:.2f})。"]},
+                ensure_ascii=False)
+    errors, ctx = _risk_check(symbol, qty, stop_loss, side=side)
+    if errors:
+        return json.dumps({"ok": False, "errors": errors}, ensure_ascii=False)
+
+    order = _post(f"{TRADE_API}/v2/orders", {
+        "symbol": symbol, "qty": str(qty), "side": side,
+        "type": "market", "time_in_force": "day",
+        "order_class": "oto",
+        "stop_loss": {"stop_price": str(stop_loss)},
+    })
+    state = _load_state()
+    state["trades_today"] += 1
+    _save_state(state)
+    action = "买入" if side == "buy" else "做空"
+    return json.dumps({
+        "ok": True, "order_id": order["id"], "status": order["status"],
+        "summary": {
+            "symbol": symbol, "qty": qty, "side": side,
+            "est_price": ctx["price"], "est_notional": round(ctx["notional"], 2),
+            "pct_of_equity": round(ctx["notional"] / ctx["equity"] * 100, 1),
+            "stop_loss": stop_loss, "stop_distance_pct": ctx["stop_dist_pct"],
+            "max_loss_usd": round(abs(ctx["price"] - stop_loss) * qty, 2),
+        },
+        "message": f"已提交 {symbol} 市价{action} {qty} 股,止损 {stop_loss}(与入场单同时挂出)。",
+    }, ensure_ascii=False)
+
+
+@mcp.tool()
+def place_direct_bracket_buy(symbol: str, pct_of_equity: float | None = None,
+                             qty: float | None = None,
+                             stop_loss: float | None = None) -> str:
+    """【直接下单·买入】仅当老板消息明确包含"直接下单"时使用!
+    一步完成:自动取现价与止损(不传 stop_loss 时=当日最低价)、
+    按账户总值百分比算股数(pct_of_equity 与 qty 二选一)、
+    跑全部硬风控、市价买入并同时挂止损(OTO,原子提交)。
+    风控不过会拒单。收到"直接下单"指令后应立即调用本工具,
+    不要先调 get_quote/preview——本工具内部都会做。"""
+    return _direct_bracket(symbol, "buy", pct_of_equity, qty, stop_loss)
+
+
+@mcp.tool()
+def place_direct_bracket_sell(symbol: str, pct_of_equity: float | None = None,
+                              qty: float | None = None,
+                              stop_loss: float | None = None) -> str:
+    """【直接下单·做空】仅当老板消息明确包含"直接下单"时使用!
+    一步完成:自动取现价与止损(不传 stop_loss 时=当日最高价)、
+    按账户总值百分比算股数(pct_of_equity 与 qty 二选一)、
+    跑全部硬风控、市价做空并同时挂止损买回单(OTO,原子提交)。
+    风控不过会拒单。收到"直接下单"指令后应立即调用本工具,
+    不要先调 get_quote/preview——本工具内部都会做。"""
+    return _direct_bracket(symbol, "sell", pct_of_equity, qty, stop_loss)
 
 
 @mcp.tool()

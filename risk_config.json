@@ -15,6 +15,8 @@
     "symbol_whitelist": "留空 [] 表示不限制;填 [\"NVDA\",\"AAPL\"] 则只允许这些标的",
     "allow_short": "true 时允许做空 (preview/place_bracket_sell);false 则做空预检直接拒单",
     "webhook_risk_pct_per_trade": "TradingView 信号自动算仓位时,单笔风险(现价-止损)×股数 占账户净值的百分比",
-    "webhook_signal_ttl_minutes": "TradingView 信号推送到 Telegram 后的确认时效(分钟),超时作废"
-  }
+    "webhook_signal_ttl_minutes": "TradingView 信号推送到 Telegram 后的确认时效(分钟),超时作废",
+    "allow_direct_order": "true 时启用 place_direct_bracket_buy/sell:老板消息明确含\"直接下单\"时免二次确认一步下单(风控照常全跑);false 则该两个工具直接拒绝"
+  },
+  "allow_direct_order": true
 }

@@ -69,7 +69,7 @@ uv run python -c "import trading_server as t; print(t.get_account())"
    `~/.hermes/profiles/trader/config.yaml` 里有 `model:` 块(provider/default),
    缺失会报 "Provider authentication failed";OAuth 凭据在共享凭据池中,无需重复登录。
 
-2. **注册本 MCP 服务器**(stdio 方式,11 个工具,做多做空双向):
+2. **注册本 MCP 服务器**(stdio 方式,13 个工具,做多做空双向,含"直接下单"快速通道):
 
    ```bash
    trader mcp add swing-trading --command uv \
