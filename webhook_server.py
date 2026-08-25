@@ -230,8 +230,8 @@ def handle_signal(sig: TVSignal) -> None:
     """TradingView 信号完整处理:盘中检查→去重→定止损→算股数→风控预检→推送确认。"""
     with _SIGNAL_LOCK:
         symbol = sig.symbol
-        log_event("signal_received", symbol=symbol, tv_price=sig.price, tv_stop=sig.stop)
         try:
+            log_event("signal_received", symbol=symbol, tv_price=sig.price, tv_stop=sig.stop)
             if not _market_open():
                 log_event("signal_ignored", symbol=symbol, reason="market_closed")
                 _tg().send_text(f"⏸ {symbol} 信号已忽略:当前非常规盘中时段。")
@@ -277,7 +277,13 @@ def handle_signal(sig: TVSignal) -> None:
                                     confirm_token=preview["confirm_token"],
                                     summary_text=text,
                                     expires_at=time.time() + TTL_MINUTES * 60)
-            pending.tg_message_id = _tg().send_text(text, build_confirm_keyboard(signal_id))
+            msg_id = _tg().send_text(text, build_confirm_keyboard(signal_id))
+            if msg_id is None:
+                # 卡片没送达就不入队:否则信号既无按钮可点,又占着同 symbol 去重位,
+                # Telegram 恢复后重发的警报反而会被挡掉
+                log_event("signal_push_failed", symbol=symbol, signal_id=signal_id)
+                return
+            pending.tg_message_id = msg_id
             PENDING.add(pending)
             log_event("signal_pending", symbol=symbol, signal_id=signal_id,
                       qty=qty, stop=stop)
@@ -294,6 +300,8 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 @app.post("/hook/{path_secret}")
 async def hook(path_secret: str, sig: TVSignal, background_tasks: BackgroundTasks):
     """TradingView 警报入口。鉴权后立即返回 200,处理放后台(TradingView 超时很短)。"""
+    # 注:FastAPI 先做 pydantic 校验再进函数体,payload 非法时返回 422 早于鉴权 403。
+    # 属有意取舍:schema 本就公开在 README,422 不泄露 secret 相关信息
     if not check_secret(path_secret, sig.secret):
         raise HTTPException(status_code=403)
     background_tasks.add_task(handle_signal, sig)

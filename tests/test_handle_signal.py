@@ -131,3 +131,30 @@ def test_handle_signal_runs_under_lock(env, monkeypatch):
     monkeypatch.setattr(ws, "_market_open", fake_open)
     ws.handle_signal(sig())
     assert seen == [True]
+
+
+def test_no_day_low_rejected(env, monkeypatch):
+    monkeypatch.setattr(ws, "_market_open", lambda: True)
+    monkeypatch.setattr(ws, "_day_low", lambda s: None)
+    ws.handle_signal(sig())
+    assert "无法获取当日最低价" in env.sent[0][0]
+    assert not ws.PENDING.has_symbol("NVDA")
+
+
+def test_push_failure_does_not_enqueue(env, monkeypatch):
+    import json as _json
+    monkeypatch.setattr(ws, "_market_open", lambda: True)
+    monkeypatch.setattr(ws, "_day_low", lambda s: 95.0)
+    monkeypatch.setattr(ts, "_latest_price", lambda s: 100.0)
+    monkeypatch.setattr(ts, "_get", lambda url, params=None: {"equity": "100000"})
+    monkeypatch.setattr(ts, "preview_bracket_buy", lambda symbol, qty, stop_loss: _json.dumps({
+        "approved": True,
+        "summary": {"symbol": symbol, "qty": qty, "est_price": 100.0,
+                    "est_notional": qty * 100.0, "pct_of_equity": 20.0,
+                    "stop_loss": stop_loss, "stop_distance_pct": 5.0,
+                    "max_loss_usd": qty * 5.0},
+        "confirm_token": "tok123",
+    }))
+    env.send_text = lambda text, reply_markup=None: None  # 模拟 Telegram 推送失败
+    ws.handle_signal(sig())
+    assert not ws.PENDING.has_symbol("NVDA")
