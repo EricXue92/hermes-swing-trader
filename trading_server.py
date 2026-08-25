@@ -22,7 +22,7 @@ import json
 import os
 import secrets
 import time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import requests
@@ -193,10 +193,15 @@ def get_daily_bars(symbol: str, days: int = 30) -> str:
     """获取标的最近 N 个交易日的日 K 线 (开高低收/成交量),用于识别阻力位、
     前高、均线趋势等。symbol: 股票代码; days: 天数,默认 30,最大 120。只读操作。"""
     days = min(days, 120)
+    # 不传 start 时 Alpaca 只查当天(免费源当天日线不可查,返回 bars=null);
+    # 用 sort=desc 取最近 N 根再反转,否则拿到的是 start 之后最早的 N 根
+    start = (date.today() - timedelta(days=days * 2 + 10)).isoformat()
     data = _get(f"{DATA_API}/v2/stocks/{symbol.upper()}/bars",
-                params={"timeframe": "1Day", "limit": days, "adjustment": "split"})
+                params={"timeframe": "1Day", "limit": days, "adjustment": "split",
+                        "start": start, "sort": "desc"})
     bars = [{"date": b["t"][:10], "o": b["o"], "h": b["h"], "l": b["l"],
-             "c": b["c"], "v": b["v"]} for b in data.get("bars", [])]
+             "c": b["c"], "v": b["v"]} for b in (data.get("bars") or [])]
+    bars.reverse()
     return json.dumps(bars, ensure_ascii=False)
 
 
