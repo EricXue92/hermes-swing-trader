@@ -1,0 +1,16 @@
+{
+  "max_position_pct_of_equity": 30,
+  "max_stop_distance_pct": 5,
+  "max_daily_trades": 6,
+  "require_confirmation": true,
+  "symbol_whitelist": [],
+  "allow_short": false,
+  "notes": {
+    "max_position_pct_of_equity": "单笔仓位金额占账户总值的最大百分比",
+    "max_stop_distance_pct": "止损价距离入场价的最大百分比,超过则拒单",
+    "max_daily_trades": "每日最大下单次数",
+    "require_confirmation": "true 时 place_bracket_buy 需要传 confirm_token(由 preview 返回),实现「先回报、你确认、再执行」",
+    "symbol_whitelist": "留空 [] 表示不限制;填 [\"NVDA\",\"AAPL\"] 则只允许这些标的",
+    "allow_short": "本系统只做多,保持 false"
+  }
+}
