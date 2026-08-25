@@ -211,6 +211,9 @@ def _tg() -> TelegramClient:
 
 # ---------------- 信号处理 ----------------
 
+_SIGNAL_LOCK = threading.Lock()  # 串行处理信号,消除去重检查与入队之间的竞态
+
+
 def _market_open() -> bool:
     return bool(ts._get(f"{ts.TRADE_API}/v2/clock").get("is_open"))
 
@@ -224,58 +227,59 @@ def _day_low(symbol: str) -> float | None:
 
 def handle_signal(sig: TVSignal) -> None:
     """TradingView 信号完整处理:盘中检查→去重→定止损→算股数→风控预检→推送确认。"""
-    symbol = sig.symbol
-    log_event("signal_received", symbol=symbol, tv_price=sig.price, tv_stop=sig.stop)
-    try:
-        if not _market_open():
-            log_event("signal_ignored", symbol=symbol, reason="market_closed")
-            _tg().send_text(f"⏸ {symbol} 信号已忽略:当前非常规盘中时段。")
-            return
-        if PENDING.has_symbol(symbol):
-            log_event("signal_ignored", symbol=symbol, reason="duplicate_pending")
-            _tg().send_text(f"⏸ {symbol} 信号已忽略:已有同标的待确认信号。")
-            return
+    with _SIGNAL_LOCK:
+        symbol = sig.symbol
+        log_event("signal_received", symbol=symbol, tv_price=sig.price, tv_stop=sig.stop)
+        try:
+            if not _market_open():
+                log_event("signal_ignored", symbol=symbol, reason="market_closed")
+                _tg().send_text(f"⏸ {symbol} 信号已忽略:当前非常规盘中时段。")
+                return
+            if PENDING.has_symbol(symbol):
+                log_event("signal_ignored", symbol=symbol, reason="duplicate_pending")
+                _tg().send_text(f"⏸ {symbol} 信号已忽略:已有同标的待确认信号。")
+                return
 
-        stop = sig.stop if sig.stop is not None else _day_low(symbol)
-        if stop is None:
-            log_event("signal_rejected", symbol=symbol, reason="no_day_low")
-            _tg().send_text(f"❌ {symbol} 信号作废:无法获取当日最低价作为止损。")
-            return
+            stop = sig.stop if sig.stop is not None else _day_low(symbol)
+            if stop is None:
+                log_event("signal_rejected", symbol=symbol, reason="no_day_low")
+                _tg().send_text(f"❌ {symbol} 信号作废:无法获取当日最低价作为止损。")
+                return
 
-        price = ts._latest_price(symbol)
-        equity = float(ts._get(f"{ts.TRADE_API}/v2/account")["equity"])
-        qty = calc_qty(equity, price, stop, RISK_PCT,
-                       float(ts.CONFIG["max_position_pct_of_equity"]))
-        if qty < 1:
-            log_event("signal_rejected", symbol=symbol, reason="qty_lt_1",
-                      price=price, stop=stop)
-            _tg().send_text(f"❌ {symbol} 信号作废:按 {RISK_PCT}% 风险算出股数"
-                            f"不足 1 股(现价 {price:.2f} 止损 {stop:.2f})。")
-            return
+            price = ts._latest_price(symbol)
+            equity = float(ts._get(f"{ts.TRADE_API}/v2/account")["equity"])
+            qty = calc_qty(equity, price, stop, RISK_PCT,
+                           float(ts.CONFIG["max_position_pct_of_equity"]))
+            if qty < 1:
+                log_event("signal_rejected", symbol=symbol, reason="qty_lt_1",
+                          price=price, stop=stop)
+                _tg().send_text(f"❌ {symbol} 信号作废:按 {RISK_PCT}% 风险算出股数"
+                                f"不足 1 股(现价 {price:.2f} 止损 {stop:.2f})。")
+                return
 
-        preview = json.loads(ts.preview_bracket_buy(symbol, qty, stop))
-        if not preview.get("approved"):
-            errors = preview.get("errors", [])
-            log_event("signal_rejected", symbol=symbol, reason="risk_check", errors=errors)
-            _tg().send_text(f"❌ {symbol} 信号被风控拒绝:\n- " + "\n- ".join(errors))
-            return
+            preview = json.loads(ts.preview_bracket_buy(symbol, qty, stop))
+            if not preview.get("approved"):
+                errors = preview.get("errors", [])
+                log_event("signal_rejected", symbol=symbol, reason="risk_check", errors=errors)
+                _tg().send_text(f"❌ {symbol} 信号被风控拒绝:\n- " + "\n- ".join(errors))
+                return
 
-        s = preview["summary"]
-        signal_id = secrets.token_hex(4)
-        text = (f"📈 TradingView 信号:买入 {s['symbol']}\n"
-                f"股数: {s['qty']}   现价: ${s['est_price']}\n"
-                f"金额: ${s['est_notional']:,}({s['pct_of_equity']}% 仓位)\n"
-                f"止损: {s['stop_loss']}(距离 {s['stop_distance_pct']}%)\n"
-                f"最大亏损: ${s['max_loss_usd']:,}\n"
-                f"⏰ {int(TTL_MINUTES)} 分钟内有效")
-        pending = PendingSignal(signal_id=signal_id, symbol=symbol, qty=qty, stop=stop,
-                                confirm_token=preview["confirm_token"],
-                                summary_text=text,
-                                expires_at=time.time() + TTL_MINUTES * 60)
-        pending.tg_message_id = _tg().send_text(text, build_confirm_keyboard(signal_id))
-        PENDING.add(pending)
-        log_event("signal_pending", symbol=symbol, signal_id=signal_id,
-                  qty=qty, stop=stop)
-    except Exception as e:
-        log_event("signal_error", symbol=symbol, error=str(e))
-        _tg().send_text(f"⚠️ {symbol} 信号处理出错:{str(e)[:200]}")
+            s = preview["summary"]
+            signal_id = secrets.token_hex(4)
+            text = (f"📈 TradingView 信号:买入 {s['symbol']}\n"
+                    f"股数: {s['qty']}   现价: ${s['est_price']}\n"
+                    f"金额: ${s['est_notional']:,}({s['pct_of_equity']}% 仓位)\n"
+                    f"止损: {s['stop_loss']}(距离 {s['stop_distance_pct']}%)\n"
+                    f"最大亏损: ${s['max_loss_usd']:,}\n"
+                    f"⏰ {int(TTL_MINUTES)} 分钟内有效")
+            pending = PendingSignal(signal_id=signal_id, symbol=symbol, qty=qty, stop=stop,
+                                    confirm_token=preview["confirm_token"],
+                                    summary_text=text,
+                                    expires_at=time.time() + TTL_MINUTES * 60)
+            pending.tg_message_id = _tg().send_text(text, build_confirm_keyboard(signal_id))
+            PENDING.add(pending)
+            log_event("signal_pending", symbol=symbol, signal_id=signal_id,
+                      qty=qty, stop=stop)
+        except Exception as e:
+            log_event("signal_error", symbol=symbol, error=str(e))
+            _tg().send_text(f"⚠️ {symbol} 信号处理出错:{str(e)[:200]}")

@@ -119,3 +119,15 @@ def test_exception_reported_to_telegram(env, monkeypatch):
     monkeypatch.setattr(ws, "_market_open", boom)
     ws.handle_signal(sig())
     assert "出错" in env.sent[0][0]
+
+
+def test_handle_signal_runs_under_lock(env, monkeypatch):
+    seen = []
+
+    def fake_open():
+        seen.append(ws._SIGNAL_LOCK.locked())
+        return False
+
+    monkeypatch.setattr(ws, "_market_open", fake_open)
+    ws.handle_signal(sig())
+    assert seen == [True]
