@@ -94,6 +94,18 @@ def test_confirm_place_failure_reported(env, monkeypatch):
     assert "已持有 NVDA" in env.edited[0][1]
 
 
+def test_confirm_place_exception_fails_closed(env, monkeypatch):
+    add_pending()
+
+    def boom(*a, **k):
+        raise RuntimeError("Alpaca API 错误 500")
+
+    monkeypatch.setattr(ts, "place_bracket_buy", boom)
+    ws.handle_callback(cb())
+    assert ws.PENDING.get("sid1") is None          # pending 已消费,重按无效
+    assert "下单异常" in env.edited[0][1]
+
+
 def test_sweep_expired_edits_messages(env):
     add_pending(expires_at=1.0)
     ws.sweep_expired()

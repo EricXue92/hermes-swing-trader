@@ -306,6 +306,7 @@ def handle_callback(cb: dict) -> None:
     """处理 Telegram 按钮点击。只信任 TG_CHAT_ID 白名单用户。"""
     cb_id = cb.get("id", "")
     if str(cb.get("from", {}).get("id")) != os.environ.get("TG_CHAT_ID", ""):
+        log_event("callback_unauthorized", from_id=str(cb.get("from", {}).get("id")))
         _tg().answer_callback(cb_id, "无权操作")
         return
     parsed = parse_callback_data(cb.get("data", ""))
@@ -315,6 +316,7 @@ def handle_callback(cb: dict) -> None:
     action, signal_id = parsed
     pending = PENDING.get(signal_id)
     if pending is None:
+        log_event("callback_unknown_signal", data=cb.get("data", ""))
         _tg().answer_callback(cb_id, "信号不存在或已处理")
         return
 
@@ -335,15 +337,26 @@ def handle_callback(cb: dict) -> None:
         log_event("signal_expired", symbol=pending.symbol, signal_id=signal_id)
         return
 
-    # 确认下单;place_bracket_buy 内部会再跑一遍完整风控
-    result = json.loads(ts.place_bracket_buy(pending.symbol, pending.qty,
-                                             pending.stop, pending.confirm_token))
+    # 确认下单:先移除 pending 再下单(fail-closed:下单抛异常时信号作废,
+    # 绝不留下可重按确认的入口 —— 宁可漏信号,不可重复下单)。
+    # place_bracket_buy 内部会再跑一遍完整风控
     PENDING.remove(signal_id)
+    try:
+        result = json.loads(ts.place_bracket_buy(pending.symbol, pending.qty,
+                                                 pending.stop, pending.confirm_token))
+    except Exception as e:
+        _tg().answer_callback(cb_id, "下单异常")
+        if pending.tg_message_id:
+            _tg().edit_text(pending.tg_message_id,
+                            pending.summary_text
+                            + f"\n\n⚠️ 下单异常,信号已作废,请人工核查 Alpaca 面板:{str(e)[:200]}")
+        log_event("order_error", symbol=pending.symbol, signal_id=signal_id, error=str(e))
+        return
     if result.get("ok"):
         _tg().answer_callback(cb_id, "已下单")
         if pending.tg_message_id:
             _tg().edit_text(pending.tg_message_id,
-                            pending.summary_text + f"\n\n✅ {result['message']}")
+                            pending.summary_text + f"\n\n✅ {result.get('message', '已提交')}")
         log_event("order_placed", symbol=pending.symbol, signal_id=signal_id,
                   order_id=result.get("order_id"))
     else:
