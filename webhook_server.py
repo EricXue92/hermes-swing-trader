@@ -137,3 +137,73 @@ class PendingStore:
 
 
 PENDING = PendingStore()
+
+
+# ---------------- Telegram(手写 Bot API,不引框架) ----------------
+
+TG_API = "https://api.telegram.org"
+
+
+def build_confirm_keyboard(signal_id: str) -> dict:
+    return {"inline_keyboard": [[
+        {"text": "✅ 确认下单", "callback_data": f"confirm:{signal_id}"},
+        {"text": "❌ 放弃", "callback_data": f"reject:{signal_id}"},
+    ]]}
+
+
+def parse_callback_data(data: str) -> tuple[str, str] | None:
+    action, _, sid = data.partition(":")
+    if action not in ("confirm", "reject") or not sid:
+        return None
+    return action, sid
+
+
+class TelegramClient:
+    def __init__(self, token: str, chat_id: str) -> None:
+        self.base = f"{TG_API}/bot{token}"
+        self.chat_id = chat_id
+
+    def _call(self, method: str, payload: dict) -> dict | list | None:
+        """统一封装;失败只记 stderr 返回 None(宁可漏通知,不让异常中断主流程)。"""
+        try:
+            r = requests.post(f"{self.base}/{method}", json=payload, timeout=35)
+            data = r.json()
+            if not data.get("ok"):
+                print(f"[telegram] {method} 失败: {str(data)[:200]}", file=sys.stderr)
+                return None
+            return data["result"]
+        except Exception as e:
+            print(f"[telegram] {method} 异常: {e}", file=sys.stderr)
+            return None
+
+    def send_text(self, text: str, reply_markup: dict | None = None) -> int | None:
+        payload: dict = {"chat_id": self.chat_id, "text": text}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        result = self._call("sendMessage", payload)
+        return result["message_id"] if isinstance(result, dict) else None
+
+    def edit_text(self, message_id: int, text: str) -> None:
+        self._call("editMessageText",
+                   {"chat_id": self.chat_id, "message_id": message_id, "text": text})
+
+    def answer_callback(self, callback_id: str, text: str = "") -> None:
+        self._call("answerCallbackQuery",
+                   {"callback_query_id": callback_id, "text": text})
+
+    def get_updates(self, offset: int) -> list[dict]:
+        result = self._call("getUpdates", {"offset": offset, "timeout": 25,
+                                           "allowed_updates": ["callback_query"]})
+        return result if isinstance(result, list) else []
+
+
+TG: TelegramClient | None = None
+
+
+def _tg() -> TelegramClient:
+    """懒加载单例;测试里直接 monkeypatch 全局 TG。"""
+    global TG
+    if TG is None:
+        TG = TelegramClient(os.environ.get("TG_BOT_TOKEN", ""),
+                            os.environ.get("TG_CHAT_ID", ""))
+    return TG
