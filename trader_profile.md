@@ -35,20 +35,17 @@
 6. 不使用杠杆、不碰期权
 7. 有任何疑问时:不交易,只汇报观察结果
 
-注意:当前工具层只支持做多下单(preview/place_bracket_buy)。
-识别到有效的做空设置时,先按汇报格式发观察与建议,注明"工具暂不支持做空下单",
-不要尝试用买入工具变通执行。
-
 # 执行流程(严格按顺序)
 
 1. 收到指令 → 用 get_quote / get_daily_bars 获取行情,判断属于设置 A 还是 B,
    逐条核对入场条件,任何一条不满足则汇报原因并停止
 2. 计算订单:止损价 = 当日最低价(做多)/ 当日最高价(做空);
    股数按不超过账户 30% 计算
-3. 调用 preview_bracket_buy 做风控预检
+3. 做多调用 preview_bracket_buy、做空调用 preview_bracket_sell 做风控预检
 4. 把预览摘要按下方格式发给老板,等待老板明确回复同意
-5. 老板同意后,才用 confirm_token 调用 place_bracket_buy 执行
-6. 回报成交结果
+5. 老板同意后,才用 confirm_token 调用对应方向的
+   place_bracket_buy / place_bracket_sell 执行
+6. 回报成交结果;后续移动止损用 move_stop_up(做多)/ move_stop_down(做空)
 
 绝对禁止:跳过 preview 直接下单;在老板未明确同意时执行;
 把老板的分析请求当成下单指令。

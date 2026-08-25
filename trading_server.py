@@ -5,7 +5,8 @@ Hermes 语言交互交易系统 - MCP 工具服务器 (Alpaca 模拟盘)
 设计原则:
 1. 硬风控在代码层,不依赖模型自觉。所有限制读取 risk_config.json。
 2. 默认「预览 -> 用户确认 -> 执行」两步下单,防止模型误触发。
-3. 只做多、必带止损(bracket order)、止损只允许上移。
+3. 可做多做空、必带止损(bracket order)、止损只朝保护利润方向移动
+   (做多只上移 move_stop_up,做空只下移 move_stop_down)。
 4. KILL_SWITCH 文件存在时,一切下单/改单操作直接拒绝。
 
 环境变量:
@@ -96,8 +97,9 @@ def _save_state(s: dict) -> None:
     STATE_FILE.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _order_fingerprint(symbol: str, qty: float, stop: float) -> str:
-    msg = f"{symbol}|{qty}|{stop}"
+def _order_fingerprint(symbol: str, qty: float, stop: float, side: str = "buy") -> str:
+    # 令牌绑定方向,buy 预览的令牌不能授权 sell 下单(反之亦然)
+    msg = f"{symbol}|{qty}|{stop}|{side}"
     return hmac.new(RUNTIME_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()[:16]
 
 
@@ -121,8 +123,10 @@ def _latest_price(symbol: str) -> float:
     return float(data["trade"]["p"])
 
 
-def _risk_check(symbol: str, qty: float, stop_loss: float) -> tuple[list[str], dict]:
-    """执行全部硬风控检查。返回 (错误列表, 上下文数据)。错误列表为空 = 通过。"""
+def _risk_check(symbol: str, qty: float, stop_loss: float,
+                side: str = "buy") -> tuple[list[str], dict]:
+    """执行全部硬风控检查。返回 (错误列表, 上下文数据)。错误列表为空 = 通过。
+    side="buy" 做多(止损须低于现价);side="sell" 做空(止损须高于现价)。"""
     errors: list[str] = []
     symbol = symbol.upper()
 
@@ -146,16 +150,23 @@ def _risk_check(symbol: str, qty: float, stop_loss: float) -> tuple[list[str], d
     if any(p["symbol"] == symbol for p in positions):
         errors.append(f"已持有 {symbol},规则禁止重复建仓或加仓摊平。")
 
-    # 止损必须低于现价
-    if stop_loss >= price:
-        errors.append(f"止损价 {stop_loss} 必须低于当前价 {price:.2f}。")
+    # 止损方向:做多必须低于现价,做空必须高于现价
+    stop_dist_pct = None
+    if side == "sell":
+        if stop_loss <= price:
+            errors.append(f"做空止损价 {stop_loss} 必须高于当前价 {price:.2f}。")
+        else:
+            stop_dist_pct = (stop_loss - price) / price * 100
     else:
-        stop_dist_pct = (price - stop_loss) / price * 100
-        if stop_dist_pct > CONFIG["max_stop_distance_pct"]:
-            errors.append(
-                f"止损距离 {stop_dist_pct:.2f}% 超过上限 {CONFIG['max_stop_distance_pct']}%。"
-                f"本笔交易应放弃(规则:不通过缩小仓位强行进场)。"
-            )
+        if stop_loss >= price:
+            errors.append(f"止损价 {stop_loss} 必须低于当前价 {price:.2f}。")
+        else:
+            stop_dist_pct = (price - stop_loss) / price * 100
+    if stop_dist_pct is not None and stop_dist_pct > CONFIG["max_stop_distance_pct"]:
+        errors.append(
+            f"止损距离 {stop_dist_pct:.2f}% 超过上限 {CONFIG['max_stop_distance_pct']}%。"
+            f"本笔交易应放弃(规则:不通过缩小仓位强行进场)。"
+        )
 
     # 仓位上限
     notional = qty * price
@@ -167,7 +178,7 @@ def _risk_check(symbol: str, qty: float, stop_loss: float) -> tuple[list[str], d
         )
 
     ctx = {"price": price, "equity": equity, "notional": notional,
-           "stop_dist_pct": round((price - stop_loss) / price * 100, 2) if stop_loss < price else None}
+           "stop_dist_pct": round(stop_dist_pct, 2) if stop_dist_pct is not None else None}
     return errors, ctx
 
 
@@ -299,6 +310,93 @@ def place_bracket_buy(symbol: str, qty: float, stop_loss: float, confirm_token: 
     _save_state(state)
     return json.dumps({"ok": True, "order_id": order["id"], "status": order["status"],
                        "message": f"已提交 {symbol} 市价买入 {qty} 股,止损 {stop_loss}。"},
+                      ensure_ascii=False)
+
+
+@mcp.tool()
+def preview_bracket_sell(symbol: str, qty: float, stop_loss: float) -> str:
+    """【做空下单第一步】预览一笔带止损的做空卖出订单并执行全部风控检查。
+    不会真的下单。返回检查结果;若通过,返回 confirm_token。
+    须把预览内容完整汇报给用户,拿到用户明确同意后,
+    再用 confirm_token 调用 place_bracket_sell 执行。
+    symbol: 股票代码; qty: 股数; stop_loss: 止损价(按规则=当日最高价,须高于现价)。"""
+    errors, ctx = _risk_check(symbol, qty, stop_loss, side="sell")
+    if errors:
+        return json.dumps({"approved": False, "errors": errors}, ensure_ascii=False)
+    token = _order_fingerprint(symbol.upper(), qty, stop_loss, side="sell")
+    return json.dumps({
+        "approved": True,
+        "summary": {
+            "symbol": symbol.upper(), "qty": qty, "side": "sell_short",
+            "est_price": ctx["price"], "est_notional": round(ctx["notional"], 2),
+            "pct_of_equity": round(ctx["notional"] / ctx["equity"] * 100, 1),
+            "stop_loss": stop_loss, "stop_distance_pct": ctx["stop_dist_pct"],
+            "max_loss_usd": round((stop_loss - ctx["price"]) * qty, 2),
+        },
+        "confirm_token": token,
+        "instruction": "请将 summary 汇报给用户;用户明确回复同意后,调用 place_bracket_sell 并传入此 token。",
+    }, ensure_ascii=False)
+
+
+@mcp.tool()
+def place_bracket_sell(symbol: str, qty: float, stop_loss: float, confirm_token: str = "") -> str:
+    """【做空下单第二步】以市价卖出做空并同时挂止损买回单 (bracket order)。
+    风控会再次完整校验;配置要求确认时,必须传入 preview 返回且用户已同意的 confirm_token。
+    symbol: 股票代码; qty: 股数; stop_loss: 止损价(高于现价); confirm_token: 预览令牌。"""
+    symbol = symbol.upper()
+    errors, _ = _risk_check(symbol, qty, stop_loss, side="sell")
+    if errors:
+        return json.dumps({"ok": False, "errors": errors}, ensure_ascii=False)
+
+    state = _load_state()
+    if CONFIG.get("require_confirmation", True):
+        expected = _order_fingerprint(symbol, qty, stop_loss, side="sell")
+        if confirm_token != expected:
+            return json.dumps({"ok": False, "errors": [
+                "confirm_token 缺失或与订单参数不符。请先调用 preview_bracket_sell,"
+                "把结果汇报给用户并获得同意后再执行。"]}, ensure_ascii=False)
+        if confirm_token in state["used_tokens"]:
+            return json.dumps({"ok": False, "errors": ["该确认令牌已被使用,请重新预览。"]},
+                              ensure_ascii=False)
+
+    order = _post(f"{TRADE_API}/v2/orders", {
+        "symbol": symbol, "qty": str(qty), "side": "sell",
+        "type": "market", "time_in_force": "day",
+        "order_class": "oto",
+        "stop_loss": {"stop_price": str(stop_loss)},
+    })
+    state["trades_today"] += 1
+    if confirm_token:
+        state["used_tokens"].append(confirm_token)
+    _save_state(state)
+    return json.dumps({"ok": True, "order_id": order["id"], "status": order["status"],
+                       "message": f"已提交 {symbol} 市价做空 {qty} 股,止损 {stop_loss}。"},
+                      ensure_ascii=False)
+
+
+@mcp.tool()
+def move_stop_down(symbol: str, new_stop: float) -> str:
+    """下移某做空持仓的止损价以保护利润。硬规则:新止损必须低于旧止损,禁止上移。
+    (做空的止损单是买回单,方向与做多相反。)
+    symbol: 股票代码; new_stop: 新止损价。"""
+    if KILL_SWITCH.exists():
+        return json.dumps({"ok": False, "errors": ["急停开关已激活,禁止改单。"]}, ensure_ascii=False)
+    symbol = symbol.upper()
+    orders = _get(f"{TRADE_API}/v2/orders", params={"status": "open", "symbols": symbol})
+    stops = [o for o in orders if o["type"] == "stop" and o["side"] == "buy"]
+    if not stops:
+        return json.dumps({"ok": False, "errors": [f"{symbol} 没有找到未成交的做空止损买回单。"]},
+                          ensure_ascii=False)
+    old = stops[0]
+    if new_stop >= float(old["stop_price"]):
+        return json.dumps({"ok": False, "errors": [
+            f"新止损 {new_stop} 不低于当前止损 {old['stop_price']}。做空止损只允许下移。"]},
+            ensure_ascii=False)
+    r = requests.patch(f"{TRADE_API}/v2/orders/{old['id']}", headers=HEADERS,
+                       json={"stop_price": str(new_stop)}, timeout=15)
+    if r.status_code >= 400:
+        return json.dumps({"ok": False, "errors": [r.text[:300]]}, ensure_ascii=False)
+    return json.dumps({"ok": True, "message": f"{symbol} 止损已从 {old['stop_price']} 下移至 {new_stop}。"},
                       ensure_ascii=False)
 
 

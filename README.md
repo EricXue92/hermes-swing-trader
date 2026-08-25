@@ -7,7 +7,7 @@
 # Hermes 语言交互交易系统(模拟盘)
 
 用自然语言在 Telegram 里指挥交易员 agent,按你的 swing trading 规则
-(Breakout / Pullback + 当日低点止损)执行交易。
+(Breakout / Pullback;做多止损=当日低点,做空止损=当日高点)执行交易。
 **风控是硬编码的**:30% 仓位上限、5% 止损距离、每日限笔数、急停开关,
 全部在工具层强制执行,模型无法绕过。默认接 Alpaca **模拟盘**,不动真钱。
 
@@ -69,7 +69,7 @@ uv run python -c "import trading_server as t; print(t.get_account())"
    `~/.hermes/profiles/trader/config.yaml` 里有 `model:` 块(provider/default),
    缺失会报 "Provider authentication failed";OAuth 凭据在共享凭据池中,无需重复登录。
 
-2. **注册本 MCP 服务器**(stdio 方式,8 个工具):
+2. **注册本 MCP 服务器**(stdio 方式,11 个工具,做多做空双向):
 
    ```bash
    trader mcp add swing-trading --command uv \

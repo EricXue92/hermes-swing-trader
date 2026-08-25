@@ -7,7 +7,8 @@
 # Hermes Conversational Trading System (Paper Trading)
 
 Command a trader agent in plain language over Telegram, executing trades
-under your swing-trading rules (Breakout / Pullback + day-low stop-loss).
+under your swing-trading rules (Breakout / Pullback; longs stop at the day
+low, shorts stop at the day high).
 **Risk controls are hard-coded**: 30% position cap, 5% max stop distance,
 daily trade limit, kill switch — all enforced at the tool layer, impossible
 for the model to bypass. Connects to the Alpaca **paper trading** account by
@@ -81,7 +82,7 @@ Portal / OpenRouter / a single API key):
    (provider/default) — if missing you'll get "Provider authentication
    failed". OAuth credentials live in the shared pool; no need to log in again.
 
-2. **Register this MCP server** (stdio, 8 tools):
+2. **Register this MCP server** (stdio, 11 tools, long and short):
 
    ```bash
    trader mcp add swing-trading --command uv \
