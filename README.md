@@ -5,14 +5,23 @@
 **风控是硬编码的**:30% 仓位上限、5% 止损距离、每日限笔数、急停开关,
 全部在工具层强制执行,模型无法绕过。默认接 Alpaca **模拟盘**,不动真钱。
 
+两条信号通道,共享同一套硬风控:
+
+1. **Hermes 对话**:在 Telegram 里跟 agent 说"突破就买",agent 查行情 → 预检 → 你确认 → 下单
+2. **TradingView 警报**(可选):在 TradingView 画好突破位,警报打到本机 webhook →
+   预检 → Telegram 卡片按钮确认 → 下单(见下文「TradingView 信号接入」)
+
 ## 文件清单
 
-| 文件                | 作用                                                 |
-| ------------------- | ---------------------------------------------------- |
-| `trading_server.py` | MCP 工具服务器:行情查询 + 带硬风控的下单/改单        |
-| `risk_config.json`  | 风控参数(仓位上限、止损距离、日限笔数、是否需要确认) |
-| `trader_profile.md` | 交易员 agent 的个性化指令(你的交易规则和纪律)        |
-| `kill_switch.sh`    | 急停脚本,不经过 LLM 直接封锁交易                     |
+| 文件                | 作用                                                     |
+| ------------------- | -------------------------------------------------------- |
+| `trading_server.py` | MCP 工具服务器:行情查询 + 带硬风控的下单/改单            |
+| `webhook_server.py` | TradingView 警报接收服务:鉴权 → 风控预检 → Telegram 确认 |
+| `risk_config.json`  | 风控参数(仓位上限、止损距离、日限笔数、信号风险比例等)   |
+| `trader_profile.md` | 交易员 agent 的个性化指令(你的交易规则和纪律)            |
+| `kill_switch.sh`    | 急停脚本,不经过 LLM 直接封锁交易                         |
+| `tests/`            | 单元测试(`uv run pytest`)                                |
+| `signals_log.jsonl` | TradingView 信号审计日志(运行时生成,已 gitignore)        |
 
 ## 部署步骤
 
@@ -24,7 +33,7 @@
 ### 第 2 步:安装交易服务器(使用 uv)
 
 ```bash
-uv sync                          # 安装依赖(mcp 1.x + requests)
+uv sync                          # 安装依赖(mcp 1.x + requests + fastapi/uvicorn)
 cp .env.example .env             # 若无 .env 则复制模板
 # 编辑 .env,填入 Key ID 和 Secret(服务器启动时自动加载,已被 .gitignore 忽略)
 # 快速自检(能连通 Alpaca 即成功):
@@ -115,10 +124,12 @@ uv run python webhook_server.py
 
 - **急停**:`./kill_switch.sh on`(或在服务器目录手动创建名为 `KILL_SWITCH` 的文件),
   瞬间封锁一切下单/改单;`off` 解除
-- **调风控**:改 `risk_config.json` 后重启服务器生效
+- **调风控**:改 `risk_config.json` 后重启服务生效;`trading_server.py`(经 Hermes)
+  和 `webhook_server.py` 是两个进程,都在跑的话两个都要重启
 - **关闭二次确认**(不建议):`require_confirmation` 改为 `false`,
-  agent 将可在风控范围内自主下单
-- **审计**:Alpaca 面板可查全部订单;Hermes 侧建议开启工具调用日志
+  agent 将可在风控范围内自主下单(TradingView 通道的按钮确认不受此开关影响)
+- **审计**:Alpaca 面板可查全部订单;TradingView 信号逐条记录在 `signals_log.jsonl`;
+  Hermes 侧建议开启工具调用日志
 
 ## 安全红线(再强调一次)
 
