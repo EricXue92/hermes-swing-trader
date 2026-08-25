@@ -95,7 +95,32 @@ uv run python -c "import trading_server as t; print(t.get_account())"
    tail -f ~/.hermes/profiles/trader/logs/gateway.log   # 应看到 "telegram connected"
    ```
 
-   按需 pin 一个工具调用能力强的模型(`trader model`)。
+6. **配置模型与 fallback**(当前实际部署,工具调用已验证):
+   主力 Kimi K3(Moonshot 国际端点),限流/5xx 时自动切 DeepSeek V4 Pro。
+
+   把两个 API key 写入 `~/.hermes/profiles/trader/.env`
+   (变量名必须用 Hermes 认的这两个,与本仓库 `.env` 里的名字不同):
+
+   ```
+   KIMI_API_KEY=<platform.moonshot.ai 的 key>
+   DEEPSEEK_API_KEY=<platform.deepseek.com 的 key>
+   ```
+
+   再确认 `~/.hermes/profiles/trader/config.yaml` 有如下两块:
+
+   ```yaml
+   model:
+     default: kimi-k3
+     provider: kimi-coding # 内置 provider,端点 api.moonshot.ai/v1
+     base_url: ""
+   fallback_providers:
+     - provider: deepseek # 内置 provider,端点 api.deepseek.com/v1
+       model: deepseek-v4-pro
+   ```
+
+   改完 `trader gateway restart` 生效;`trader fallback list` 可查看链条,
+   `trader -z "用 get_quote 查一下 AAPL"` 可单次验证。换模型用 `trader model`
+   交互选择(交易 agent 优先选工具调用能力强的推理模型)。
 
 ### 第 4 步:跑通一条完整链路
 
