@@ -1,3 +1,9 @@
+<div align="right">
+
+[English](README.en.md) | **中文**
+
+</div>
+
 # Hermes 语言交互交易系统(模拟盘)
 
 用自然语言在 Telegram 里指挥交易员 agent,按你的 swing trading 规则
