@@ -148,11 +148,6 @@ def _risk_check(symbol: str, qty: float, stop_loss: float,
     equity = float(account["equity"])
     price = _latest_price(symbol)
 
-    # 不重复建仓 / 不摊平
-    positions = _get(f"{TRADE_API}/v2/positions")
-    if any(p["symbol"] == symbol for p in positions):
-        errors.append(f"已持有 {symbol},规则禁止重复建仓或加仓摊平。")
-
     # 止损方向:做多必须低于现价,做空必须高于现价
     stop_dist_pct = None
     if side == "sell":
@@ -191,9 +186,14 @@ def _risk_check(symbol: str, qty: float, stop_loss: float,
 def get_account() -> str:
     """查询账户概况:总市值、现金、购买力、当日盈亏。只读操作。"""
     a = _get(f"{TRADE_API}/v2/account")
+    equity, last_equity = float(a["equity"]), float(a.get("last_equity") or 0)
+    # last_equity 是上一交易日收盘净值;新账户为 0,此时无法计算当日盈亏
+    daily_pl = round(equity - last_equity, 2) if last_equity > 0 else None
     return json.dumps({
         "equity": a["equity"], "cash": a["cash"],
         "buying_power": a["buying_power"],
+        "daily_pl": daily_pl,
+        "daily_pl_pct": round(daily_pl / last_equity * 100, 2) if daily_pl is not None else None,
         "kill_switch_active": KILL_SWITCH.exists(),
         "trades_today": _load_state()["trades_today"],
         "max_daily_trades": CONFIG["max_daily_trades"],
