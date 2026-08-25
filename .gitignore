@@ -27,3 +27,5 @@ Thumbs.db
 # ---- 日志 ----
 *.log
 logs/
+
+signals_log.jsonl

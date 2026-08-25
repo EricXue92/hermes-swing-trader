@@ -67,6 +67,50 @@ uv run python -c "import trading_server as t; print(t.get_account())"
 预期流程:agent 查行情 → 核对入场条件 → `preview_bracket_buy` 风控预检 →
 把订单摘要发给你 → 你回复"确认" → agent 用 confirm_token 执行 → 回报成交。
 
+## TradingView 信号接入(可选)
+
+在 TradingView 上画突破位/设警报,信号经 webhook 进入本系统风控,
+Telegram 按钮确认后在 Alpaca 模拟盘成交。仅美股、只做多。
+
+### 准备
+
+1. **专用 Telegram bot**:找 @BotFather 新建一个 bot(与 Hermes 的 bot 分开),
+   拿到 token;私聊 @userinfobot 查自己的数字 chat id;先给新 bot 发一条 /start
+2. **`.env` 追加**(参考 `.env.example`):`WEBHOOK_SECRET`(随机串,
+   `python -c "import secrets; print(secrets.token_urlsafe(24))"` 生成)、
+   `TG_BOT_TOKEN`、`TG_CHAT_ID`
+3. **Cloudflare Tunnel**(免费):
+   ```bash
+   brew install cloudflared
+   cloudflared tunnel --url http://localhost:8787
+   ```
+
+记下输出的 `https://xxx.trycloudflare.com` 地址(快速模式,重启会变;
+要固定域名可用 `cloudflared tunnel create` 配置命名隧道)
+
+### 启动
+
+```bash
+uv run python webhook_server.py
+```
+
+### TradingView 警报配置(需支持 webhook 的付费套餐)
+
+- Webhook URL:`https://<你的隧道域名>/hook/<WEBHOOK_SECRET>`
+- 警报消息(Message)填:
+  ```json
+  {"secret": "<WEBHOOK_SECRET>", "action": "buy", "symbol": "{{ticker}}", "price": {{close}}}
+  ```
+  可选加 `"stop": 你的止损价`;不加则自动用当日最低价(符合本系统规则)
+
+### 信号流程
+
+信号到达 → 非盘中/重复/风控不过 → Telegram 告知原因并作废;
+通过 → 收到订单摘要卡片(股数按单笔风险 `webhook_risk_pct_per_trade`% 自动计算)
+→ 30 分钟内点【✅ 确认下单】成交,点【❌ 放弃】或超时作废。
+急停(`KILL_SWITCH`)、日限笔数等硬风控与 Hermes 通道完全共享。
+审计日志逐条记录在 `signals_log.jsonl`。
+
 ## 日常操作
 
 - **急停**:`./kill_switch.sh on`(或在服务器目录手动创建名为 `KILL_SWITCH` 的文件),

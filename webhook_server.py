@@ -390,3 +390,19 @@ def poll_loop() -> None:
         except Exception as e:
             print(f"[poll] 异常: {e}", file=sys.stderr)
             time.sleep(5)
+
+
+# ---------------- 入口 ----------------
+
+def main() -> None:
+    missing = [k for k in ("APCA_API_KEY_ID", "WEBHOOK_SECRET", "TG_BOT_TOKEN", "TG_CHAT_ID")
+               if not os.environ.get(k)]
+    if missing:
+        raise SystemExit(f"缺少环境变量: {', '.join(missing)}(请在 .env 中配置)")
+    threading.Thread(target=poll_loop, daemon=True).start()
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8787)
+
+
+if __name__ == "__main__":
+    main()
