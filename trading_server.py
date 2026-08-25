@@ -133,6 +133,9 @@ def _risk_check(symbol: str, qty: float, stop_loss: float,
     if KILL_SWITCH.exists():
         return (["急停开关已激活 (KILL_SWITCH 文件存在),所有交易操作被禁止。请联系管理员。"], {})
 
+    if side == "sell" and not CONFIG.get("allow_short", False):
+        return (["配置已禁用做空 (allow_short=false)。"], {})
+
     wl = CONFIG.get("symbol_whitelist") or []
     if wl and symbol not in wl:
         errors.append(f"{symbol} 不在允许交易的白名单内: {wl}")

@@ -29,3 +29,4 @@ Thumbs.db
 logs/
 
 signals_log.jsonl
+webhook.log

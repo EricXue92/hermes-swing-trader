@@ -9,7 +9,7 @@
 Command a trader agent in plain language over Telegram, executing trades
 under your swing-trading rules (Breakout / Pullback; longs stop at the day
 low, shorts stop at the day high).
-**Risk controls are hard-coded**: 30% position cap, 5% max stop distance,
+**Risk controls are hard-coded**: 50% position cap, 5% max stop distance,
 daily trade limit, kill switch — all enforced at the tool layer, impossible
 for the model to bypass. Connects to the Alpaca **paper trading** account by
 default; no real money involved.

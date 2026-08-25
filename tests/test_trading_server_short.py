@@ -32,6 +32,7 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setitem(ts.CONFIG, "max_stop_distance_pct", 5)
     monkeypatch.setitem(ts.CONFIG, "max_position_pct_of_equity", 30)
     monkeypatch.setitem(ts.CONFIG, "require_confirmation", True)
+    monkeypatch.setitem(ts.CONFIG, "allow_short", True)
     return tmp_path
 
 
@@ -108,6 +109,13 @@ def test_place_sell_blocked_by_daily_limit(env):
     r = json.loads(ts.preview_bracket_sell("NVDA", 10, 104.0))
     assert r["approved"] is False
     assert any("最大下单次数" in e for e in r["errors"])
+
+
+def test_sell_blocked_when_allow_short_false(env, monkeypatch):
+    monkeypatch.setitem(ts.CONFIG, "allow_short", False)
+    r = json.loads(ts.preview_bracket_sell("NVDA", 10, 104.0))
+    assert r["approved"] is False
+    assert any("做空" in e for e in r["errors"])
 
 
 def test_place_sell_blocked_by_kill_switch(env):
