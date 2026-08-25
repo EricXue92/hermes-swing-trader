@@ -62,6 +62,12 @@ def test_check_secret_false_when_env_missing(monkeypatch):
     assert not ws.check_secret("", "")
 
 
+def test_check_secret_non_ascii_input_returns_false(monkeypatch):
+    monkeypatch.setenv("WEBHOOK_SECRET", "topsecret")
+    assert not ws.check_secret("café", "café")
+    assert not ws.check_secret("topsecret", "café")
+
+
 # ---- log_event ----
 
 def test_log_event_appends_jsonl(tmp_path, monkeypatch):

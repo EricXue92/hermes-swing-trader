@@ -67,11 +67,11 @@ class TVSignal(BaseModel):
 
 def check_secret(path_secret: str, body_secret: str) -> bool:
     """URL path 与 body 双重比对 WEBHOOK_SECRET;环境变量缺失一律拒绝。"""
-    expected = os.environ.get("WEBHOOK_SECRET", "")
+    expected = os.environ.get("WEBHOOK_SECRET", "").encode()
     if not expected:
         return False
-    return (hmac.compare_digest(path_secret, expected)
-            and hmac.compare_digest(body_secret, expected))
+    return (hmac.compare_digest(path_secret.encode(), expected)
+            and hmac.compare_digest(body_secret.encode(), expected))
 
 
 def calc_qty(equity: float, price: float, stop: float,
