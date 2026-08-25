@@ -10,6 +10,13 @@ Hermes 语言交互交易系统 - MCP 工具服务器 (Alpaca 模拟盘)
 
 环境变量:
   APCA_API_KEY_ID / APCA_API_SECRET_KEY  Alpaca 模拟盘 key (paper trading)
+  FINNHUB_API_KEY                        Finnhub key,实时报价用(免费档即可)
+
+数据源说明:
+  最新价/当日开高低 走 Finnhub(全市场实时合并报价;缺 key 时退回 Alpaca IEX);
+  日 K 线/成交量 走 Alpaca feed=delayed_sip(全市场数据,当日延迟 15 分钟,
+  历史日线精确)。Alpaca 免费档默认的 IEX 源只覆盖约 2% 成交量,价格常偏离
+  真实市场价,不要用它做突破判断。
 依赖:
   pip install mcp requests
 运行(stdio 模式,由 Hermes 拉起):
@@ -47,6 +54,9 @@ RUNTIME_SECRET = secrets.token_hex(16)        # 每次启动随机,签发确认�
 
 TRADE_API = "https://paper-api.alpaca.markets"   # 模拟盘。切真钱前请三思并全面复核!
 DATA_API = "https://data.alpaca.markets"
+ALPACA_FEED = "delayed_sip"                      # 免费档可用的全市场数据源(延迟15分钟)
+FINNHUB_API = "https://finnhub.io/api/v1"
+FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY") or os.environ.get("FINHUB_API_Key", "")
 
 HEADERS = {
     "APCA-API-KEY-ID": os.environ.get("APCA_API_KEY_ID", ""),
@@ -91,7 +101,22 @@ def _order_fingerprint(symbol: str, qty: float, stop: float) -> str:
     return hmac.new(RUNTIME_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()[:16]
 
 
+def _finnhub_quote(symbol: str) -> dict:
+    """Finnhub 实时合并报价: c=现价 o/h/l=当日开高低 pc=昨收 t=时间戳。"""
+    r = requests.get(f"{FINNHUB_API}/quote",
+                     params={"symbol": symbol, "token": FINNHUB_KEY}, timeout=15)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Finnhub API 错误 {r.status_code}: {r.text[:300]}")
+    data = r.json()
+    # 无效代码时 Finnhub 返回全 0 而不是报错
+    if not data.get("c"):
+        raise RuntimeError(f"Finnhub 未返回 {symbol} 的报价(代码可能无效)")
+    return data
+
+
 def _latest_price(symbol: str) -> float:
+    if FINNHUB_KEY:
+        return float(_finnhub_quote(symbol)["c"])
     data = _get(f"{DATA_API}/v2/stocks/{symbol}/trades/latest")
     return float(data["trade"]["p"])
 
@@ -176,16 +201,24 @@ def get_quote(symbol: str) -> str:
     """查询单个标的的实时行情:最新价、当日开高低、昨收、成交量。
     symbol: 美股代码,如 NVDA。只读操作。"""
     symbol = symbol.upper()
-    snap = _get(f"{DATA_API}/v2/stocks/{symbol}/snapshot")
+    snap = _get(f"{DATA_API}/v2/stocks/{symbol}/snapshot",
+                params={"feed": ALPACA_FEED})
     d, prev = snap.get("dailyBar", {}), snap.get("prevDailyBar", {})
-    return json.dumps({
+    out = {
         "symbol": symbol,
         "latest_price": snap.get("latestTrade", {}).get("p"),
         "day_open": d.get("o"), "day_high": d.get("h"),
         "day_low": d.get("l"), "day_volume": d.get("v"),
         "prev_close": prev.get("c"), "prev_high": prev.get("h"),
         "note": "day_low 即当日最低价,按规则用作止损参考",
-    }, ensure_ascii=False)
+    }
+    if FINNHUB_KEY:
+        # 实时合并报价覆盖延迟 15 分钟的 Alpaca 值;成交量与昨日高点仍取自 Alpaca
+        q = _finnhub_quote(symbol)
+        out.update({"latest_price": q["c"], "day_open": q["o"],
+                    "day_high": q["h"], "day_low": q["l"], "prev_close": q["pc"]})
+        out["note"] += ";行情为 Finnhub 实时价,day_volume 延迟约 15 分钟"
+    return json.dumps(out, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -198,7 +231,10 @@ def get_daily_bars(symbol: str, days: int = 30) -> str:
     start = (date.today() - timedelta(days=days * 2 + 10)).isoformat()
     data = _get(f"{DATA_API}/v2/stocks/{symbol.upper()}/bars",
                 params={"timeframe": "1Day", "limit": days, "adjustment": "split",
-                        "start": start, "sort": "desc"})
+                        "start": start, "sort": "desc",
+                        # bars 接口不认 delayed_sip;免费档 sip 可查 15 分钟前
+                        # 的全市场数据,日线足够
+                        "feed": "sip"})
     bars = [{"date": b["t"][:10], "o": b["o"], "h": b["h"], "l": b["l"],
              "c": b["c"], "v": b["v"]} for b in (data.get("bars") or [])]
     bars.reverse()
