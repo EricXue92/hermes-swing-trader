@@ -26,6 +26,7 @@ from math import floor
 from pathlib import Path
 
 import requests
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, field_validator
 
 import trading_server as ts
@@ -283,3 +284,17 @@ def handle_signal(sig: TVSignal) -> None:
         except Exception as e:
             log_event("signal_error", symbol=symbol, error=str(e))
             _tg().send_text(f"⚠️ {symbol} 信号处理出错:{str(e)[:200]}")
+
+
+# ---------------- HTTP 入口 ----------------
+
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+
+@app.post("/hook/{path_secret}")
+async def hook(path_secret: str, sig: TVSignal, background_tasks: BackgroundTasks):
+    """TradingView 警报入口。鉴权后立即返回 200,处理放后台(TradingView 超时很短)。"""
+    if not check_secret(path_secret, sig.secret):
+        raise HTTPException(status_code=403)
+    background_tasks.add_task(handle_signal, sig)
+    return {"ok": True}
