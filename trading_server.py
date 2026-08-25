@@ -30,6 +30,16 @@ from mcp.server.fastmcp import FastMCP
 
 # ---------------- 基础配置 ----------------
 BASE_DIR = Path(__file__).resolve().parent
+
+# 加载 .env 文件(已存在的环境变量优先,不会被覆盖)
+_env_file = BASE_DIR / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+
 CONFIG = json.loads((BASE_DIR / "risk_config.json").read_text(encoding="utf-8"))
 STATE_FILE = BASE_DIR / "state.json"          # 记录当日下单次数、已用确认令牌
 KILL_SWITCH = BASE_DIR / "KILL_SWITCH"        # 该文件存在 = 急停
