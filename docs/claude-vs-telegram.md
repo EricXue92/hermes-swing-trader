@@ -17,6 +17,14 @@
 
 两套记忆**互不相通**。
 
+> **旁注:还有一个 `hermes`(默认 profile)。** 终端里直接跑 `hermes`(不带
+> `-p trader`)是同一个 Hermes 引擎的默认 profile:有 terminal/file 等全套工具、
+> 能改代码,用自己的 `~/.hermes/state.db` 和记忆,与 trader 完全隔离(见 §8)。
+> 所以交易员"物理上不能改代码"不是引擎能力差异,而是 trader profile 的配置
+> 刻意锁死(禁工具、换 SOUL.md、独立存储)。默认 hermes 和 Claude Code 角色
+> 重叠(都能改代码),但本项目的进化角色由 Claude Code 承担,默认 hermes
+> 不参与任何交易链路。
+
 ## 2. 两条典型链路
 
 ### 链路 A:Telegram 里发"NVDA 30% 直接下单"

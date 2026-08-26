@@ -280,6 +280,13 @@
     margin: 1.25rem 0;
     font-size: 0.95rem;
   }
+  .callout.note {
+    background: var(--panel);
+    border-left-color: var(--mark);
+    border-top: 1px solid var(--line-soft);
+    border-right: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+  }
   blockquote.thesis {
     margin: 1.5rem 0;
     padding: 1rem 1.5rem;
@@ -509,6 +516,16 @@
       </table>
     </div>
     <p>两套记忆<strong>互不相通</strong>。</p>
+    <div class="callout note">
+      <strong>旁注:还有一个 <code>hermes</code>(默认 profile)。</strong>
+      终端里直接跑 <code>hermes</code>(不带 <code>-p trader</code>)是同一个
+      Hermes 引擎的默认 profile:有 terminal/file 等全套工具、能改代码,用自己的
+      <code>~/.hermes/state.db</code> 和记忆,与 trader 完全隔离(见
+      §8)。所以交易员"物理上不能改代码"不是引擎能力差异,而是 trader profile
+      的配置刻意锁死(禁工具、换 SOUL.md、独立存储)。默认 hermes 和 Claude Code
+      角色重叠(都能改代码),但本项目的进化角色由 Claude Code 承担,默认 hermes
+      不参与任何交易链路。
+    </div>
   </section>
 
   <section id="s2">
