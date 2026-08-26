@@ -313,7 +313,7 @@ def place_bracket_buy(symbol: str, qty: float, stop_loss: float, confirm_token: 
 
     order = _post(f"{TRADE_API}/v2/orders", {
         "symbol": symbol, "qty": str(qty), "side": "buy",
-        "type": "market", "time_in_force": "day",
+        "type": "market", "time_in_force": "gtc",
         "order_class": "oto",
         "stop_loss": {"stop_price": str(stop_loss)},
     })
@@ -374,7 +374,7 @@ def place_bracket_sell(symbol: str, qty: float, stop_loss: float, confirm_token:
 
     order = _post(f"{TRADE_API}/v2/orders", {
         "symbol": symbol, "qty": str(qty), "side": "sell",
-        "type": "market", "time_in_force": "day",
+        "type": "market", "time_in_force": "gtc",
         "order_class": "oto",
         "stop_loss": {"stop_price": str(stop_loss)},
     })
@@ -414,7 +414,7 @@ def _direct_bracket(symbol: str, side: str, pct_of_equity: float | None,
 
     order = _post(f"{TRADE_API}/v2/orders", {
         "symbol": symbol, "qty": str(qty), "side": side,
-        "type": "market", "time_in_force": "day",
+        "type": "market", "time_in_force": "gtc",
         "order_class": "oto",
         "stop_loss": {"stop_price": str(stop_loss)},
     })
