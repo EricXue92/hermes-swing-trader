@@ -159,6 +159,19 @@ trader -z "..."           # 单次执行一条指令(测试用)
 - db 上建了全文索引(FTS),配 `session_search` 工具可搜历史会话——但 trader 的
   telegram 工具集没开这个工具,交易员用不上。
 
+**`/new` 之后,历史去哪了?** 分两个层面:
+
+- **磁盘层面:还在**。`/new` 只是给当前会话盖上 `ended_at` 标记、开一个新会话;
+  旧会话全部消息原封不动留在 `messages` 表里,这个库只增不减。
+- **模型层面:等于没了**。每轮只组装**当前会话**的消息进上下文,新会话从零开始;
+  且交易员没有 `session_search` 工具,**物理上没有手段**翻旧会话——对它来说
+  `/new` 之前的对话就像从没发生过,还"记得"的只有 SOUL.md 和 MEMORY.md。
+
+实操含义:想查旧对话,在 Claude Code 里用 `sqlite3` 读
+`~/.hermes/profiles/trader/state.db`,原文都在;有值得留的结论,`/new` 前先说
+"把要点记入记忆";交易状态(持仓/订单)在 Alpaca 服务端,重置不受影响。
+会话历史对交易员只是短期工作记忆,对你则是一份永久留底的日志。
+
 ### 第 3 层:长期记忆 MEMORY.md(memory 工具)
 
 - 位置:`~/.hermes/profiles/trader/memories/MEMORY.md`,**硬上限 2200 字符**(约 2 KB)。

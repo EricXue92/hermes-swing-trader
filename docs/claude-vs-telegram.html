@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Claude Code vs Telegram 交易员</title>
+<style>
+  :root {
+    --bg: #f7f8f6;
+    --panel: #ffffff;
+    --ink: #1b2129;
+    --muted: #5c6570;
+    --line: #dde1dd;
+    --line-soft: #e8ebe7;
+    --code-bg: #eef0ec;
+    --code-ink: #2a3038;
+    --tg: #2b72a8;
+    --tg-bg: #eaf2f8;
+    --cc: #a8592a;
+    --cc-bg: #f7efe8;
+    --warn-bg: #faf3e2;
+    --warn-edge: #c9a24a;
+    --mark: #8a939e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181d;
+      --panel: #1b2027;
+      --ink: #e4e7e4;
+      --muted: #98a1ab;
+      --line: #323a42;
+      --line-soft: #272e35;
+      --code-bg: #10141a;
+      --code-ink: #cdd3d9;
+      --tg: #6aaede;
+      --tg-bg: #1a2a38;
+      --cc: #d9915c;
+      --cc-bg: #33251b;
+      --warn-bg: #2c2617;
+      --warn-edge: #a8863d;
+      --mark: #6b7580;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181d;
+    --panel: #1b2027;
+    --ink: #e4e7e4;
+    --muted: #98a1ab;
+    --line: #323a42;
+    --line-soft: #272e35;
+    --code-bg: #10141a;
+    --code-ink: #cdd3d9;
+    --tg: #6aaede;
+    --tg-bg: #1a2a38;
+    --cc: #d9915c;
+    --cc-bg: #33251b;
+    --warn-bg: #2c2617;
+    --warn-edge: #a8863d;
+    --mark: #6b7580;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family:
+      -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+      "Noto Sans CJK SC", sans-serif;
+    line-height: 1.85;
+    font-size: 16px;
+    margin: 0;
+  }
+  .page {
+    max-width: 46em;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 6rem;
+  }
+
+  code,
+  pre,
+  .mono {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  code {
+    font-size: 0.85em;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 0.12em 0.4em;
+    border-radius: 4px;
+    word-break: break-all;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    line-height: 1.7;
+    font-size: 0.82rem;
+    margin: 1.25rem 0;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  /* ---------- header ---------- */
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1rem;
+  }
+  h1 {
+    font-size: 2rem;
+    line-height: 1.35;
+    font-weight: 700;
+    margin: 0 0 0.75rem;
+    text-wrap: balance;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin: 0 0 1.5rem;
+  }
+  .legend {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 2.5rem;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.28em 0.85em;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+  }
+  .chip::before {
+    content: "";
+    width: 0.55em;
+    height: 0.55em;
+    border-radius: 50%;
+    flex: none;
+  }
+  .chip.tg {
+    color: var(--tg);
+    background: var(--tg-bg);
+    border-color: transparent;
+  }
+  .chip.tg::before {
+    background: var(--tg);
+  }
+  .chip.cc {
+    color: var(--cc);
+    background: var(--cc-bg);
+    border-color: transparent;
+  }
+  .chip.cc::before {
+    background: var(--cc);
+  }
+
+  /* ---------- toc ---------- */
+  nav.toc {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 3rem;
+  }
+  nav.toc .toc-title {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    margin-bottom: 0.75rem;
+  }
+  nav.toc ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem 2rem;
+  }
+  @media (max-width: 560px) {
+    nav.toc ol {
+      grid-template-columns: 1fr;
+    }
+  }
+  nav.toc a {
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 0.9rem;
+    display: flex;
+    gap: 0.6em;
+    padding: 0.15em 0;
+  }
+  nav.toc a:hover {
+    color: var(--tg);
+  }
+  nav.toc .n {
+    color: var(--mark);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.8rem;
+    flex: none;
+    width: 1.4em;
+    text-align: right;
+    padding-top: 0.2em;
+  }
+
+  /* ---------- sections ---------- */
+  section {
+    margin-bottom: 3.5rem;
+  }
+  h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.4;
+    margin: 0 0 1rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    text-wrap: balance;
+  }
+  h2 .n {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.95rem;
+    color: var(--mark);
+    flex: none;
+  }
+  h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 2rem 0 0.6rem;
+  }
+  h3 .badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--code-bg);
+    border: 1px solid var(--line-soft);
+    border-radius: 999px;
+    padding: 0.15em 0.7em;
+    margin-left: 0.6em;
+    vertical-align: 0.15em;
+    white-space: nowrap;
+  }
+  p {
+    margin: 0.75rem 0;
+  }
+  ul,
+  ol {
+    margin: 0.75rem 0;
+    padding-left: 1.5em;
+  }
+  li {
+    margin: 0.35rem 0;
+  }
+  strong {
+    font-weight: 700;
+  }
+
+  .callout {
+    background: var(--warn-bg);
+    border-left: 3px solid var(--warn-edge);
+    border-radius: 0 8px 8px 0;
+    padding: 0.75rem 1.25rem;
+    margin: 1.25rem 0;
+    font-size: 0.95rem;
+  }
+  blockquote.thesis {
+    margin: 1.5rem 0;
+    padding: 1rem 1.5rem;
+    border-left: 3px solid var(--tg);
+    background: var(--panel);
+    border-radius: 0 8px 8px 0;
+    font-weight: 600;
+  }
+
+  /* ---------- tables ---------- */
+  .tablewrap {
+    overflow-x: auto;
+    margin: 1.25rem 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9rem;
+    background: var(--panel);
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+    line-height: 1.65;
+  }
+  tr:last-child td {
+    border-bottom: none;
+  }
+  th {
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-weight: 600;
+    background: var(--code-bg);
+    white-space: nowrap;
+  }
+  th.tg {
+    color: var(--tg);
+  }
+  th.cc {
+    color: var(--cc);
+  }
+  td.rowlabel {
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  td .yes {
+    color: var(--tg);
+    font-weight: 700;
+  }
+  td .no {
+    color: var(--cc);
+    font-weight: 700;
+  }
+
+  /* chain diagrams */
+  .chain {
+    position: relative;
+  }
+  .chain .lane {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 8px 0 0 8px;
+  }
+  .chain.tg .lane {
+    background: var(--tg);
+  }
+  .chain.cc .lane {
+    background: var(--cc);
+  }
+
+  .ok {
+    color: var(--tg);
+    font-weight: 700;
+  }
+  .bad {
+    color: var(--cc);
+    font-weight: 700;
+  }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  a {
+    color: var(--tg);
+  }
+  :focus-visible {
+    outline: 2px solid var(--tg);
+    outline-offset: 2px;
+  }
+</style>
+
+<div class="page">
+  <header>
+    <p class="eyebrow">hermes-swing-trader · 内部手册</p>
+    <h1>Claude Code vs Telegram 交易员:架构与使用指南</h1>
+    <p class="subtitle">
+      整理自 2026-08-25 的问答(§8–§9 补于
+      2026-08-26)。描述的是本项目的实际部署。
+    </p>
+    <div class="legend">
+      <span class="chip tg">Telegram 交易员 · 盘中执行</span>
+      <span class="chip cc">Claude Code · 盘后进化</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="目录">
+    <div class="toc-title">目录</div>
+    <ol>
+      <li>
+        <a href="#s1"><span class="n">1</span>两套完全不同的系统</a>
+      </li>
+      <li>
+        <a href="#s2"><span class="n">2</span>两条典型链路</a>
+      </li>
+      <li>
+        <a href="#s3"><span class="n">3</span>指令文件 vs 记忆系统</a>
+      </li>
+      <li>
+        <a href="#s4"><span class="n">4</span>为什么 Telegram 里改规则不可靠</a>
+      </li>
+      <li>
+        <a href="#s5"><span class="n">5</span>怎么分工使用效果最大</a>
+      </li>
+      <li>
+        <a href="#s6"><span class="n">6</span>常用命令速查</a>
+      </li>
+      <li>
+        <a href="#s7"><span class="n">7</span>当前部署快照</a>
+      </li>
+      <li>
+        <a href="#s8"><span class="n">8</span>Hermes 的记忆管理(实测)</a>
+      </li>
+      <li>
+        <a href="#s9"><span class="n">9</span>使用教程:把交易员用顺手</a>
+      </li>
+    </ol>
+  </nav>
+
+  <section id="s1">
+    <h2><span class="n">§1</span>两个对话入口是两套完全不同的系统</h2>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th class="tg">Telegram(交易员)</th>
+            <th class="cc">Claude Code(终端)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="rowlabel">背后程序</td>
+            <td>
+              Hermes Agent 网关,launchd 服务
+              <code>ai.hermes.gateway-trader</code>,7×24 常驻
+            </td>
+            <td>Claude Code CLI,打开终端才存在</td>
+          </tr>
+          <tr>
+            <td class="rowlabel">模型</td>
+            <td>
+              <strong>kimi-k3</strong>(Moonshot 国际端点),限流/5xx 自动切
+              <strong>deepseek-v4-pro</strong>
+            </td>
+            <td>Claude(Anthropic)</td>
+          </tr>
+          <tr>
+            <td class="rowlabel">系统提示词</td>
+            <td>
+              <code>~/.hermes/profiles/trader/SOUL.md</code>(= 仓库
+              <code>trader_profile.md</code>)
+            </td>
+            <td>Claude Code 内置 + CLAUDE.md + 记忆索引</td>
+          </tr>
+          <tr>
+            <td class="rowlabel">可用工具</td>
+            <td>
+              仅 ~19 个:13 个交易 MCP 工具 +
+              vision/todo/memory/clarify/cronjob/kanban
+            </td>
+            <td>几乎无限:shell、文件读写、git、测试、联网</td>
+          </tr>
+          <tr>
+            <td class="rowlabel">能改代码吗</td>
+            <td>
+              <span class="no">不能</span>(terminal/file/code_execution
+              已禁用,物理上没有手段)
+            </td>
+            <td><span class="yes">能</span>,这是本职</td>
+          </tr>
+          <tr>
+            <td class="rowlabel">能下单吗</td>
+            <td>
+              <span class="yes">能</span>,每单都被
+              <code>trading_server.py</code> 硬风控拦截检查
+            </td>
+            <td>不主动碰交易</td>
+          </tr>
+          <tr>
+            <td class="rowlabel">记忆</td>
+            <td>
+              <code>state.db</code>(对话历史)+ Hermes memory 工具(长期记忆)
+            </td>
+            <td><code>~/.claude/projects/.../memory/*.md</code></td>
+          </tr>
+          <tr>
+            <td class="rowlabel">计费</td>
+            <td>Moonshot / DeepSeek API 费</td>
+            <td>Claude 订阅/API 费</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>两套记忆<strong>互不相通</strong>。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="n">§2</span>两条典型链路</h2>
+
+    <h3>链路 A:Telegram 里发"NVDA 30% 直接下单"</h3>
+    <pre class="chain tg"><span class="lane"></span><code>Telegram 服务器
+  → 本机网关(白名单 TELEGRAM_ALLOWED_USERS 过滤)
+  → 取 state.db 会话历史 + SOUL.md,调 Moonshot kimi-k3 API
+  → kimi-k3 决定调 place_direct_bracket_buy
+  → MCP 子进程(trading_server.py):查 Finnhub 现价 → 取当日低点做止损
+    → 按账户 30% 算股数 → 跑硬风控 → Alpaca 提交 OTO 单(入场+止损原子提交)
+  → 结果回 kimi-k3 → 组织"已成交"回复 → 发回 Telegram
+  → 整轮写入 state.db</code></pre>
+    <p>全程没有 Claude 参与;终端关着它也照常工作(收盘日报也是它自己跑的)。</p>
+
+    <h3>链路 B:Claude Code 里说"止损距离上限改成 8%"</h3>
+    <pre
+      class="chain cc"
+    ><span class="lane"></span><code>Claude 改 risk_config.json / 代码 → 写/改测试 → uv run pytest 验证
+  → cp trader_profile.md ~/.hermes/profiles/trader/SOUL.md(若动了规则文本)
+  → trader gateway restart(网关和 MCP 子进程加载新代码)
+  → git commit + push → 值得跨会话记的写进 Claude 记忆</code></pre>
+    <p>从这一刻起 Telegram 里的交易员受新规则约束,它自己对此毫无发言权。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="n">§3</span>指令文件 vs 记忆系统(SOUL.md ≈ CLAUDE.md)</h2>
+    <p>两边都有"指令文件"和"记忆"两套东西,不要混淆:</p>
+    <p><strong>指令文件(人写的,每轮对话无条件全量注入,权威):</strong></p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="cc">Claude Code</th>
+            <th class="tg">Hermes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>CLAUDE.md</code></td>
+            <td>
+              <code>SOUL.md</code>(源头是仓库 <code>trader_profile.md</code>)
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>记忆系统(agent 自己写的,按相关性检索,可能漏):</strong></p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="cc">Claude Code</th>
+            <th class="tg">Hermes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <code>~/.claude/projects/.../memory/*.md</code>(索引 MEMORY.md
+              每次加载)
+            </td>
+            <td>Hermes memory 工具的存储</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      注意:SOUL.md <strong>不会自动同步</strong>——改了
+      <code>trader_profile.md</code> 必须
+      <code>cp trader_profile.md ~/.hermes/profiles/trader/SOUL.md</code> 并
+      <code>trader gateway restart</code>。
+    </div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="n">§4</span>为什么"在 Telegram 里改规则"不可靠</h2>
+    <p>在 Telegram 说"以后止损都用 3%",这句话只有两个去处:</p>
+    <ol>
+      <li>
+        <strong>对话历史</strong
+        >(state.db)——网关重启、新会话、历史截断/压缩后就没了
+      </li>
+      <li>
+        <strong>memory 工具</strong
+        >(如果模型想到要存)——下次靠检索命中才进上下文,可能漏
+      </li>
+    </ol>
+    <p>
+      就算记住了也未必执行:<strong>LLM 的所有指令都只是"建议"</strong
+      >,每轮回复是一次全新的概率推理。SOUL.md
+      写的"止损=当日低点"每轮都在场,聊天里说的"3%"时在时不在,两条冲突时行为不稳定;fallback
+      切到 deepseek 后取舍可能又不同。
+    </p>
+    <p>
+      而硬风控层(代码)根本不知道这回事:它只校验"距离
+      ≤5%",直接下单的自动止损写死了取当日低点——没有任何一层替你把关"必须 3%"。
+    </p>
+    <p>
+      <strong>对比</strong>:同一句话在 Claude Code 里说,会变成确定性代码 + 配置
+      + 测试,每一单物理上只能符合规则,不随重启、换模型、上下文截断而漂移。
+    </p>
+    <blockquote class="thesis">
+      一句话:Telegram 里的话影响模型的"想法",Claude 里改的是模型的"世界"。<br />
+      这正是"风控在工具层硬编码,不依赖模型自觉"的设计原因。
+    </blockquote>
+  </section>
+
+  <section id="s5">
+    <h2><span class="n">§5</span>怎么分工使用效果最大</h2>
+    <p>
+      <span class="chip tg">Telegram = 盘中执行</span
+      >(它离行情和下单最近、7×24、手机可用):
+    </p>
+    <ul>
+      <li>快速执行:"NVDA 30% 直接下单"、"突破昨高就买"</li>
+      <li>盯盘问询:"看下持仓"、"NVDA 什么情况"</li>
+      <li>仓位管理:"止损上移到 205"</li>
+      <li>看图分析:发行情截图(vision 工具)</li>
+      <li>收盘日报自动推送</li>
+    </ul>
+    <p>
+      <span class="chip cc">Claude Code = 盘后进化</span
+      >(能动代码、有硬手段、记忆可靠):
+    </p>
+    <ul>
+      <li>改规则与风控(代码级生效,交易员违反不了)</li>
+      <li>加功能(做空、直接下单、日报都是这么来的)</li>
+      <li>复盘审计:拉订单历史、算胜率盈亏比(要跑脚本,交易员干不了)</li>
+      <li>排障:查日志、修网关、修数据源</li>
+      <li>换模型/调基建:<code>trader model</code>、fallback 链、cron</li>
+    </ul>
+    <p><strong>三个习惯:</strong></p>
+    <ol>
+      <li>
+        <strong>规则沉淀</strong>:Telegram 交易中发现"希望它这样做"→ 回头在
+        Claude 里说一句,软偏好变硬规则
+      </li>
+      <li>
+        <strong>定期复盘</strong>:每周让 Claude
+        拉成交记录做统计,用数据决定调哪条规则
+      </li>
+      <li>
+        <strong>信任边界</strong>:交易员=手快但只按规则办事的操盘手;<code
+          >require_confirmation</code
+        >
+        和急停别轻易关;任何"让它更自主"的想法先在 Claude 里过一遍
+      </li>
+    </ol>
+  </section>
+
+  <section id="s6">
+    <h2><span class="n">§6</span>常用命令速查</h2>
+    <pre><code>trader                    # = hermes -p trader,以交易员 profile 跑 hermes
+trader model              # 交互式换模型(改 config.yaml 的 model 块)
+trader fallback list      # 查看/管理备用模型链
+trader gateway status     # 网关状态 / restart / stop
+trader cron list          # 定时任务(收盘日报 daily-close-report)
+trader -z "..."           # 单次执行一条指令(测试用)
+./kill_switch.sh on|off   # 急停,不经过任何 LLM 直接封锁交易</code></pre>
+  </section>
+
+  <section id="s7">
+    <h2><span class="n">§7</span>当前部署快照(2026-08-25)</h2>
+    <ul>
+      <li>
+        模型:kimi-k3 主力(kimi-coding / api.moonshot.ai),deepseek-v4-pro
+        fallback
+      </li>
+      <li>行情:Finnhub 实时价 + Alpaca 全市场 feed(delayed_sip/sip)</li>
+      <li>
+        风控:仓位 ≤50%、止损距离 ≤5%、日限 6
+        笔、allow_short=true、allow_direct_order=true、require_confirmation=true
+      </li>
+      <li>止损规则:做多=当日最低价(只上移),做空=当日最高价(只下移)</li>
+      <li>
+        收盘日报:cron <code>10 5 * * 2-6</code>(北京时间,覆盖美股夏/冬令时),投递
+        Telegram
+      </li>
+      <li>测试:<code>uv run pytest</code>,63 个</li>
+    </ul>
+  </section>
+
+  <section id="s8">
+    <h2><span class="n">§8</span>Hermes 的记忆管理(实测 2026-08-26)</h2>
+    <p>
+      交易员的所有存储在 <code>~/.hermes/profiles/trader/</code> 下,和主
+      Hermes(<code>~/.hermes/state.db</code>)<strong>完全独立</strong>——你用默认
+      profile 聊的内容,交易员看不到,反之亦然。
+    </p>
+    <p>记忆分三层,容量和寿命完全不同:</p>
+
+    <h3>第 1 层:工作记忆<span class="badge">容量 = 模型窗口</span></h3>
+    <p>
+      每次你在 Telegram 发消息,网关组装的上下文 =
+      <strong>SOUL.md(全量)+ MEMORY.md(全量)+ 当前会话所有活跃消息</strong
+      >。这一层受 kimi-k3 的上下文窗口限制,是真正意义上的"记忆容量"。
+    </p>
+
+    <h3>
+      第 2 层:会话历史 <code>state.db</code
+      ><span class="badge">磁盘无上限 · 实测 752 KB</span>
+    </h3>
+    <ul>
+      <li>
+        位置:<code>~/.hermes/profiles/trader/state.db</code>(SQLite)。实测 752
+        KB,6 个会话、130 条消息(Telegram DM 会话 99 条,累计输入约 12.3 万
+        token;其余是日报 cron 和 <code>trader -z</code> 测试)。
+      </li>
+      <li>
+        <strong>每一轮完整落库</strong
+        >:你的消息、模型回复、每次工具调用及其返回,每条带 token
+        计数。磁盘上没有上限,只增不减。
+      </li>
+      <li>
+        <strong>Telegram 会话是一个永不结束的长会话</strong>(配置
+        <code>session_reset: mode: none</code>),不像 Claude Code
+        每次打开终端是新会话。
+      </li>
+      <li>
+        <strong>自动压缩</strong>:<code>messages</code> 表有
+        <code>compacted</code>/<code>active</code>
+        标志位。会话长到快撑爆模型窗口时,Hermes
+        把老消息压缩成摘要、标记不活跃,之后只送摘要进模型(原文仍在 db 里)。目前
+        130 条全部
+        <code>active=1, compacted=0</code
+        >,还没触发过——但迟早会,届时早期对话细节就只剩摘要。
+      </li>
+      <li>
+        db 上建了全文索引(FTS),配
+        <code>session_search</code> 工具可搜历史会话——但 trader 的 telegram
+        工具集没开这个工具,交易员用不上。
+      </li>
+    </ul>
+    <div class="callout">
+      <strong><code>/new</code> 之后,历史去哪了?</strong>分两个层面:<br />
+      <strong>磁盘层面:还在</strong>。<code>/new</code> 只是给当前会话盖上
+      <code>ended_at</code> 标记、开一个新会话;旧会话全部消息原封不动留在
+      <code>messages</code> 表里,这个库只增不减。<br />
+      <strong>模型层面:等于没了</strong
+      >。每轮只组装<strong>当前会话</strong>的消息进上下文,新会话从零开始;且交易员没有
+      <code>session_search</code>
+      工具,<strong>物理上没有手段</strong>翻旧会话——对它来说
+      <code>/new</code> 之前的对话就像从没发生过,还"记得"的只有 SOUL.md 和
+      MEMORY.md。<br />
+      实操含义:想查旧对话,在 Claude Code 里用 <code>sqlite3</code> 读
+      <code>~/.hermes/profiles/trader/state.db</code
+      >,原文都在;有值得留的结论,<code>/new</code>
+      前先说"把要点记入记忆";交易状态(持仓/订单)在 Alpaca
+      服务端,重置不受影响。会话历史对交易员只是短期工作记忆,对你则是一份永久留底的日志。
+    </div>
+
+    <h3>
+      第 3 层:长期记忆 MEMORY.md<span class="badge">硬上限 2200 字符</span>
+    </h3>
+    <ul>
+      <li>
+        位置:<code>~/.hermes/profiles/trader/memories/MEMORY.md</code>,<strong
+          >硬上限 2200 字符</strong
+        >(约 2 KB)。
+      </li>
+      <li>
+        模型自己决定写什么(每 10 轮 nudge
+        一次提醒它考虑),全量注入每轮对话——不靠检索、不会漏,但写满了就得自己取舍覆盖。
+      </li>
+      <li>实测目前 636 字节、两条事实(止损价取整分;8-25 规则更新确认)。</li>
+    </ul>
+
+    <h3>和 Claude Code 的对比</h3>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th class="tg">Hermes(交易员)</th>
+            <th class="cc">Claude Code</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="rowlabel">会话生命周期</td>
+            <td>Telegram 一个会话无限续,直到手动 <code>/reset</code></td>
+            <td>每次启动新会话,转录存文件可 resume</td>
+          </tr>
+          <tr>
+            <td class="rowlabel">上下文溢出</td>
+            <td>自动压缩老消息成摘要(原文留在 db)</td>
+            <td>同样自动 compact(原文留在转录文件)</td>
+          </tr>
+          <tr>
+            <td class="rowlabel">长期记忆结构</td>
+            <td>单个 MEMORY.md,≤2200 字符,全量注入</td>
+            <td>
+              一个事实一个 <code>.md</code> 文件 + 索引;索引全量加载,正文按需读
+            </td>
+          </tr>
+          <tr>
+            <td class="rowlabel">长期记忆容量</td>
+            <td>约 2 KB 硬顶</td>
+            <td>实际不封顶(按需读文件)</td>
+          </tr>
+          <tr>
+            <td class="rowlabel">历史可检索性</td>
+            <td>SQLite FTS(trader 未开放给模型)</td>
+            <td>可直接 grep 转录/记忆文件</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      两边分层哲学一致:<strong
+        >指令文件全量注入 → 会话历史受窗口限制、溢出压缩 →
+        长期记忆跨会话</strong
+      >。真正的差别在长期记忆形态:Hermes 是一块 2 KB 的小黑板,写满要擦;Claude
+      Code 是索引 + 文件库。这也是"规则沉淀放 Claude
+      Code"的又一个理由——那块小黑板只够记"止损要取整分"量级的操作事实,规则必须走代码和
+      <code>trader_profile.md</code>。
+    </p>
+  </section>
+
+  <section id="s9">
+    <h2><span class="n">§9</span>使用教程:把 Telegram 交易员用顺手</h2>
+
+    <h3>9.1 下指令的技巧(让它可靠执行)</h3>
+    <ol>
+      <li>
+        <strong>一条消息一件事,带全参数</strong
+        >。好指令自带标的、比例/股数、方式:
+        <ul>
+          <li><span class="ok">✓</span> "NVDA 30% 直接下单"</li>
+          <li><span class="ok">✓</span> "TSLA 突破昨高就买,20%"</li>
+          <li>
+            <span class="bad">✗</span> "看看有什么机会搞一下"(开放式指令 =
+            把决策权交给概率推理)
+          </li>
+        </ul>
+      </li>
+      <li>
+        <strong>用系统里已有的动词</strong
+        >。"直接下单"(place_direct)、"止损上移到
+        X"(move_stop_up)、"看下持仓/账户"——指令词和工具名对得上,模型不用猜。
+      </li>
+      <li>
+        <strong>确认环节别省</strong>。<code>require_confirmation=true</code>
+        时它会复述订单再执行;看到复述与你意图不符,直接说"取消"。这是最后一道人肉风控。
+      </li>
+      <li>
+        <strong>别在 Telegram 里定规则</strong>(见 §4)。"以后都
+        XX"这种话最多进那块 2 KB 黑板,可能被覆盖、可能不被执行。规则回 Claude
+        Code 落成代码。
+      </li>
+      <li>
+        <strong>希望它跨会话记住的操作事实,明说"记住:……"</strong
+        >。比如"记住:财报周不开新仓"。它会写进 MEMORY.md,每轮都在场——但注意 2200
+        字符上限,只记高价值短事实。
+      </li>
+    </ol>
+
+    <h3>9.2 Context 管理(会话命令)</h3>
+    <p>网关直接拦截这些命令,不经过模型,随时可发:</p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>命令</th>
+            <th>作用</th>
+            <th>什么时候用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/status</code></td>
+            <td>看会话状态(模型、token 用量等)</td>
+            <td>感觉它变慢/变贵时先看这个</td>
+          </tr>
+          <tr>
+            <td><code>/compact</code></td>
+            <td>手动压缩:老消息变摘要,窗口腾出来</td>
+            <td>提示"session too large"或响应变慢</td>
+          </tr>
+          <tr>
+            <td><code>/new</code> <code>/reset</code></td>
+            <td>开全新会话,历史清零(db 里仍有存档)</td>
+            <td>换话题/隔一段时间/它开始胡言乱语</td>
+          </tr>
+          <tr>
+            <td><code>/stop</code></td>
+            <td>打断当前正在执行的轮次</td>
+            <td>它跑偏了、或你想撤回刚发的指令</td>
+          </tr>
+          <tr>
+            <td><code>/queue</code></td>
+            <td>查看排队中的消息</td>
+            <td>连发多条后确认没丢</td>
+          </tr>
+          <tr>
+            <td><code>/model</code></td>
+            <td>查看/切换模型</td>
+            <td>怀疑 fallback 切到了 deepseek 时</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>建议的卫生习惯:</strong></p>
+    <ul>
+      <li>
+        <strong>每周或大行情节点后 <code>/new</code> 一次</strong
+        >。长会话三个代价:每轮重发全部历史(token
+        费),响应变慢,压缩后早期细节漂移。持仓、订单都在 Alpaca
+        服务端,重置会话不丢任何交易状态;长期事实在 MEMORY.md
+        也不丢。重置前想留笔记,先说一句"把本次会话要点记入记忆"。
+      </li>
+      <li>
+        <strong>别把会话历史当账本</strong>。"我上周买了啥"这种问题让它查
+        <code>get_positions</code> /
+        <code>list_open_orders</code
+        >(真数据),而不是靠它回忆聊天记录(可能已被压缩)。
+      </li>
+      <li>
+        想审计它的记忆,在 Claude Code 里:<code
+          >cat ~/.hermes/profiles/trader/memories/MEMORY.md</code
+        >,发现过期/错误条目直接让 Claude 改。
+      </li>
+    </ul>
+
+    <h3>9.3 加功能/改规则的标准流程(在 Claude Code 做)</h3>
+    <pre
+      class="chain cc"
+    ><span class="lane"></span><code>1. 描述需求("加一个 XX 工具"/"止损规则改成 XX")
+2. Claude 改 trading_server.py / risk_config.json + 写测试 → uv run pytest
+3. 若动了规则文本:cp trader_profile.md ~/.hermes/profiles/trader/SOUL.md
+4. trader gateway restart(网关和 MCP 子进程加载新代码)
+5. 在 Telegram 里发一条测试指令验证,git commit</code></pre>
+    <p>改完立刻在 Telegram 验证这一步别省——网关不重启就是旧代码在跑。</p>
+
+    <h3>9.4 排障速查</h3>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>症状</th>
+            <th>第一步</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Telegram 不回复</td>
+            <td>
+              <code>trader gateway status</code>;挂了就 <code>restart</code>
+            </td>
+          </tr>
+          <tr>
+            <td>回复但报工具错误</td>
+            <td>
+              看 <code>~/.hermes/profiles/trader/logs/</code>,通常是
+              Finnhub/Alpaca
+            </td>
+          </tr>
+          <tr>
+            <td>答非所问/忘了刚说的</td>
+            <td>
+              <code>/status</code> 看 token;多半该 <code>/compact</code> 或
+              <code>/new</code>
+            </td>
+          </tr>
+          <tr>
+            <td>风格突变/质量下降</td>
+            <td><code>/model</code> 确认是否 fallback 到了 deepseek</td>
+          </tr>
+          <tr>
+            <td>紧急停止一切交易</td>
+            <td><code>./kill_switch.sh on</code>(不经过任何 LLM)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    源文件:<code>docs/claude-vs-telegram.md</code> · hermes-swing-trader ·
+    更新于 2026-08-26
+  </footer>
+</div>
+</body>
+</html>
