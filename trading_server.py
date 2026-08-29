@@ -511,6 +511,42 @@ def move_stop_up(symbol: str, new_stop: float) -> str:
 
 
 @mcp.tool()
+def ensure_stops() -> str:
+    """检查所有持仓的止损保护,给没有止损单的持仓自动补挂 GTC 止损。
+    止损价按铁律取:做多 = 当日最低价,做空 = 当日最高价。
+    护体操作,不计入当日下单次数。每次下单成交后、以及每日收盘日报时都应调用,
+    确保「每笔持仓必带止损」。"""
+    if KILL_SWITCH.exists():
+        return json.dumps({"ok": False, "errors": ["急停开关已激活,禁止下单。"]}, ensure_ascii=False)
+    positions = _get(f"{TRADE_API}/v2/positions")
+    if not positions:
+        return json.dumps({"ok": True, "repaired": 0, "message": "当前空仓,无需止损保护。"},
+                          ensure_ascii=False)
+    open_orders = _get(f"{TRADE_API}/v2/orders", params={"status": "open"})
+    protected = {(o["symbol"], o["side"]) for o in open_orders if o["type"] == "stop"}
+    results, repaired = [], 0
+    for p in positions:
+        symbol = p["symbol"]
+        is_long = p["side"] == "long"
+        stop_side = "sell" if is_long else "buy"
+        if (symbol, stop_side) in protected:
+            results.append({"symbol": symbol, "status": "已有止损保护"})
+            continue
+        low, high = _day_low_high(symbol)
+        stop_price = round(low if is_long else high, 2)
+        order = _post(f"{TRADE_API}/v2/orders", {
+            "symbol": symbol, "qty": str(p["qty"]).lstrip("-"), "side": stop_side,
+            "type": "stop", "time_in_force": "gtc",
+            "stop_price": str(stop_price),
+        })
+        repaired += 1
+        results.append({"symbol": symbol, "status": "已补挂止损",
+                        "stop_price": stop_price, "order_id": order["id"]})
+    return json.dumps({"ok": True, "repaired": repaired, "positions": results},
+                      ensure_ascii=False)
+
+
+@mcp.tool()
 def list_open_orders() -> str:
     """查询所有未成交订单(含挂着的止损单)。只读操作。"""
     orders = _get(f"{TRADE_API}/v2/orders", params={"status": "open"})

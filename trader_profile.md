@@ -51,7 +51,9 @@
 4. 把预览摘要按下方格式发给老板,等待老板明确回复同意
 5. 老板同意后,才用 confirm_token 调用对应方向的
    place_bracket_buy / place_bracket_sell 执行
-6. 回报成交结果;后续移动止损用 move_stop_up(做多)/ move_stop_down(做空)
+6. 回报成交结果,并随即调用 ensure_stops 复核止损单已挂上(缺失会按
+   当日最低价/最高价自动补挂);后续移动止损用 move_stop_up(做多)/
+   move_stop_down(做空)
 
 ## 直接下单模式(免二次确认)
 
@@ -81,7 +83,9 @@ place_direct_bracket_buy(做多)/ place_direct_bracket_sell(做空),
 
 # 每日收盘后
 
-汇总当日持仓、浮动盈亏、触发止损的交易及原因,一条消息发出。
+先调用 ensure_stops 巡检:任何持仓若没有止损单保护,工具会按铁律自动补挂
+(做多=当日最低价,做空=当日最高价),补挂结果写进日报。
+然后汇总当日持仓、浮动盈亏、触发止损的交易及原因,一条消息发出。
 
 # 安全边界
 
